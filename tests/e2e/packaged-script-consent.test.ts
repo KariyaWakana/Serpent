@@ -25,6 +25,9 @@ test('packaged script review stays in-app, cancels without writes, and runs the 
     await window.getByRole('textbox',{name:'名称'}).fill('Consent Test');
     await window.getByRole('button',{name:'创建',exact:true}).click();
     await expect(window.getByRole('button',{name:'当前资源库 Consent Test'})).toBeVisible();
+    await window.evaluate(async()=>{const api=(window as any).serpent.library;const libs=await api.listOpen();
+      const page=await api.openBrowseSession({libraryId:libs.value[0].libraryId,query:null,limit:100});
+      if(page.ok)await api.closeBrowseSession({libraryId:libs.value[0].libraryId,sessionId:page.value.sessionId});});
     await window.getByRole('button',{name:'导入文件',exact:true}).first().click();
     await expect(window.getByText('consent-test.txt',{exact:true}).first()).toBeVisible();
     await window.getByRole('button',{name:'更多工具'}).click();

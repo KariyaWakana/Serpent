@@ -58,7 +58,7 @@ export const MODEL_EXTENSIONS = [
 
 /** Document formats with a native preview/viewer path. */
 export const DOCUMENT_EXTENSIONS = [
-  '.pdf', '.html', '.htm', '.ai',
+  '.pdf', '.html', '.htm', '.ai', '.dxf',
 ] as const;
 
 /**

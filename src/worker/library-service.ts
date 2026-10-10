@@ -23156,6 +23156,7 @@ export class LibraryService {
     const ext = path.extname(assetPath).toLowerCase();
     const imageDecoder = imageDecoderForExtension(ext);
     const viewerDecoder = imageViewerDecoderForExtension(ext);
+    if (ext === '.dxf') return null;
     if (mediaType === 'other' || (mediaType === 'image' && !imageDecoder)) {
       throw new LibraryServiceError('UNSUPPORTED_MEDIA_TYPE');
     }
@@ -29253,6 +29254,8 @@ export class LibraryService {
       }
       const documentMime = extension === '.pdf' || extension === '.ai'
         ? 'application/pdf'
+        : extension === '.dxf'
+          ? 'image/vnd.dxf'
         : extension === '.html' || extension === '.htm'
           ? 'text/html'
           : 'application/octet-stream';
@@ -30080,6 +30083,7 @@ export class LibraryService {
       '.ai': 'application/pdf',
       '.html': 'text/html; charset=utf-8',
       '.htm': 'text/html; charset=utf-8',
+      '.dxf': 'image/vnd.dxf',
     };
     const mimeType = directImageMimeForExtension(extension)
       ?? videoMimeForExtension(extension)
@@ -30119,7 +30123,7 @@ export class LibraryService {
       ...IMAGE_EXTENSIONS,
       ...VIDEO_EXTENSIONS,
       ...MODEL_EXTENSIONS,
-      ...DOCUMENT_EXTENSIONS,
+      ...DOCUMENT_EXTENSIONS.filter((extension) => extension !== '.dxf'),
     ];
     const hasSourceDimensions = columnsFor(openLibrary.connection, 'revision_artifacts').has('width')
       && columnsFor(openLibrary.connection, 'revision_artifacts').has('height');
@@ -31732,7 +31736,7 @@ export class LibraryService {
       ...VIDEO_EXTENSIONS.map((extension) => extension.slice(1)),
       ...AUDIO_EXTENSION_NAMES,
       ...MODEL_EXTENSIONS.map((extension) => extension.slice(1)),
-      ...DOCUMENT_EXTENSIONS.map((extension) => extension.slice(1)),
+      ...DOCUMENT_EXTENSIONS.filter((extension) => extension !== '.dxf').map((extension) => extension.slice(1)),
       // Serpent-485aeb: font cards render a real sample line offscreen in Main.
       ...FONT_EXTENSIONS.map((extension) => extension.slice(1)),
     ];
@@ -36448,7 +36452,7 @@ export class LibraryService {
       truncated,
       byteSize: truncated ? maxBytes : buffer.length,
       lineCount: countTextLines(content),
-      editable: row.location_kind === 'managed' && !isTrashed,
+      editable: row.location_kind === 'managed' && !isTrashed && !truncated && extension !== '.ghx',
       mimeType: textMimeForExtension(extension) ?? 'text/plain',
     };
     this.cacheTextAssetPreview(cacheKey, value);
@@ -36508,6 +36512,12 @@ export class LibraryService {
 
     const absolutePath = this.resolveAssetPath(input.libraryId, input.assetId);
     const dir = path.dirname(absolutePath);
+    // GH XML is a structured definition preview, not a source editor. Never
+    // replace a file whose capped preview omitted the rest of its contents.
+    if (path.extname(row.relative_file_path).toLowerCase() === '.ghx'
+      || statSync(absolutePath).size > TEXT_VIEWER_MAX_BYTES) {
+      throw new LibraryServiceError('LIBRARY_NOT_WRITABLE');
+    }
     const tmpPath = path.join(dir, `.serpent-text-edit-${randomUUID()}.tmp`);
     const payload = Buffer.from(input.content, 'utf8');
     this.noteClientFilesystemMutation();

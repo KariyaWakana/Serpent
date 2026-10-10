@@ -16,11 +16,13 @@ import { iconActionAttrs } from "./icon-action-attrs";
 import { useLocale, useT } from "./i18n";
 import { applyTextViewerTextareaLayout } from "./text-viewer-layout";
 import { invalidateTextAssetPreviewCache } from "./TextAssetPreviewTile";
+import { codeLanguage, highlightedCodeLines, matchingCodeLines } from './code-preview';
 
 export type TextViewerControlsProps = {
   api: SerpentLibraryApi;
   libraryId: string;
   assetId: string;
+  filename?: string;
   onClose: () => void;
   onPresentationReady?: () => void;
   onSaved?: () => void;
@@ -46,6 +48,7 @@ export const TextViewerControls = forwardRef<
     api,
     libraryId,
     assetId,
+    filename = '',
     onClose,
     onPresentationReady,
     onSaved,
@@ -65,6 +68,14 @@ export const TextViewerControls = forwardRef<
   const [saving, setSaving] = useState(false);
   const [wrap, setWrap] = useState(persistTextViewerWrap);
   const [actionError, setActionError] = useState<string | null>(null);
+  const language = codeLanguage(filename);
+  const [reading, setReading] = useState(Boolean(language));
+  const [query, setQuery] = useState('');
+  const [matchIndex, setMatchIndex] = useState(0);
+  const codeRef = useRef<HTMLPreElement>(null);
+  const matches = useMemo(() => matchingCodeLines(content, query), [content, query]);
+  const highlighted = useMemo(() => highlightedCodeLines(content, language), [content, language]);
+  const matchedLines = useMemo(() => new Set(matches), [matches]);
   const onSavedRef = useRef(onSaved);
   const contentRef = useRef(content);
   const baselineRef = useRef(baseline);
@@ -148,7 +159,7 @@ export const TextViewerControls = forwardRef<
 
   useEffect(() => {
     resizeTextarea();
-  }, [content, lineCount, loading, wrap, resizeTextarea]);
+  }, [content, lineCount, loading, wrap, reading, resizeTextarea]);
 
   useEffect(() => {
     if (loading) return;
@@ -272,6 +283,7 @@ export const TextViewerControls = forwardRef<
       <div className="preview-text-topbar">
         <div className="preview-text-meta" aria-live="polite">
           <span>
+            {language ? `${filename.toLowerCase().endsWith('.ghx') ? 'GH XML' : language} · ` : ''}
             {t("preview.textLineCount", { count: lineCount })}
             {truncated ? ` · ${t("preview.textTruncated")}` : ""}
             {!editable ? ` · ${t("preview.textReadOnly")}` : ""}
@@ -287,6 +299,19 @@ export const TextViewerControls = forwardRef<
           ) : null}
         </div>
         <div className="preview-text-actions">
+          {language ? <>
+            <input aria-label={t('preview.codeSearch')} className="preview-code-search" placeholder={t('preview.codeSearch')}
+              value={query} onChange={event => {setQuery(event.target.value);setMatchIndex(0);}} />
+            <button type="button" className="preview-text-action is-code-label" disabled={!matches.length} onClick={()=>{
+              const line=matches[matchIndex % matches.length];
+              if (!reading) { setReading(true); }
+              requestAnimationFrame(()=>codeRef.current?.querySelector(`[data-code-line="${line}"]`)?.scrollIntoView({block:'center'}));
+              setMatchIndex(index=>index+1);
+            }}>{matches.length ? `${(matchIndex % matches.length)+1}/${matches.length}` : t('preview.codeFind')}</button>
+            {editable ? <button type="button" className="preview-text-action is-code-label" onClick={()=>setReading(value=>!value)}>
+              {reading ? t('preview.codeEdit') : t('preview.codeRead')}
+            </button> : null}
+          </> : null}
           <button
             aria-pressed={wrap}
             className={`preview-text-action${wrap ? " is-active" : ""}`}
@@ -323,6 +348,12 @@ export const TextViewerControls = forwardRef<
         </div>
       </div>
       <div className="preview-text-scroll">
+        {reading ? <pre ref={codeRef} className={`preview-code-read${wrap ? ' is-wrap' : ''}`} aria-label={t('preview.codeRead')}>
+          {highlighted.map((line,index)=><div key={index} data-code-line={index+1} className={matchedLines.has(index+1) ? 'is-match' : ''}>
+            <span className="preview-code-number" aria-hidden="true">{index+1}</span>
+            <code dangerouslySetInnerHTML={{__html:line || ' '}} />
+          </div>)}
+        </pre> :
         <div className={`preview-text-line-layer${wrap ? " is-wrap" : ""}`}>
           <pre aria-hidden="true" className="preview-text-gutter">
             {gutter}
@@ -338,6 +369,7 @@ export const TextViewerControls = forwardRef<
             value={content}
           />
         </div>
+        }
       </div>
     </div>
   );

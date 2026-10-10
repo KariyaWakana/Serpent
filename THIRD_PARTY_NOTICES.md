@@ -49,3 +49,8 @@ Electron Forge (MIT)、@electron/rebuild (MIT)、ESLint (MIT)、Playwright (Apac
 - 媒体二进制（ffmpeg/OIIO）：`resources/media-binaries/<platform>/licenses/`（随 media 包分发）
 - ufbx：`resources/ufbx/LICENSE`
 - 各 npm 依赖：`node_modules/<包名>/LICENSE*`（随源码构建时可用）
+## CAD and code preview additions
+
+- **dxf-viewer 1.0.49**, copyright Artyom Lebedev and contributors, MPL-2.0. Unmodified upstream source: https://github.com/vagran/dxf-viewer (npm version 1.0.49); distributed source and license are included under `node_modules/dxf-viewer` in the application archive. Its dependencies include Three.js, earcut, loglevel and opentype.js with their own bundled license notices.
+- **highlight.js 11.11.1**, copyright Ivan Sagalaev and contributors, BSD-3-Clause. https://github.com/highlightjs/highlight.js. License included under `node_modules/highlight.js/LICENSE` in the application archive.
+- CAD text fallback uses the existing bundled DejaVu Sans font and its existing license notice. It does not supply all CJK/SHX glyphs.

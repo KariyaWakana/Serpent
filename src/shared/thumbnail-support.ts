@@ -26,6 +26,8 @@ export function assetSupportsThumbnail(asset: {
   mediaType: ThumbnailSupportMediaType;
   displayName: string;
 }): boolean {
+  // DXF has a read-only model-space viewer, but no raster thumbnail generator.
+  if (asset.displayName.toLowerCase().endsWith('.dxf')) return false;
   if (asset.mediaType === "text") return false;
   // Documents (PDF etc.) get a first-page thumbnail; HTML thumbnails render
   // offscreen in Main (Serpent-8ca259).
