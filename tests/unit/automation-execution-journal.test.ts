@@ -547,6 +547,29 @@ describe('AutomationExecutionJournal', () => {
     expect(reloaded.start(retained.executionId)).toMatchObject({ status: 'running' });
   });
 
+  it('allows human consent to take longer than the runtime budget, then enforces a fresh deadline', async () => {
+    let now = new Date('2026-07-29T12:00:00.000Z');
+    const journal = createJournal(undefined, undefined, {
+      clock: () => now,
+      resourceBudget: { ...DEFAULT_AUTOMATION_EXECUTION_RESOURCE_BUDGET, maxWallTimeMs: 20 },
+    });
+    const execution = journal.create({
+      source: 'desktop-console', libraryId: libraryOne, sessionId: consoleSessionOne,
+      scriptSource: 'return 1;', declaredCapabilities: ['asset.read'],
+    });
+    journal.start(execution.executionId);
+    now = new Date('2026-07-29T12:05:00.000Z');
+    await new Promise<void>((resolve) => setTimeout(resolve, 35));
+    expect(journal.get(execution.executionId)?.status).toBe('awaiting-authorization');
+    expect(journal.resolve(execution.executionId)).toBeUndefined();
+    expect(journal.authorizeFromDesktop({ executionId: execution.executionId, persistence: 'session' }).ok).toBe(true);
+    const context = journal.resolve(execution.executionId);
+    expect(context?.deadlineAt).toBe('2026-07-29T12:05:00.020Z');
+    await new Promise<void>((resolve) => setTimeout(resolve, 35));
+    expect(journal.get(execution.executionId)?.status).toBe('timed-out');
+    expect(context?.abortSignal?.aborted).toBe(true);
+  });
+
   it('persists a wall-clock budget and aborts a running execution when its deadline expires', async () => {
     const journal = createJournal(undefined, undefined, {
       resourceBudget: {

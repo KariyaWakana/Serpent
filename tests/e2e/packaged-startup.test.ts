@@ -6,6 +6,43 @@ import path from 'node:path';
 
 import { _electron as electron, expect, test } from '@playwright/test';
 
+test('the packaged scripting utility transpiles and executes TypeScript', async () => {
+  const executablePath = process.env.SERPENT_E2E_PACKAGED_EXECUTABLE;
+  if (!executablePath) throw new Error('Set SERPENT_E2E_PACKAGED_EXECUTABLE after packaging.');
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'serpent-packaged-runtime-'));
+  const application = await electron.launch({
+    executablePath,
+    args: [],
+    env: { ...process.env, SERPENT_E2E: '1', SERPENT_E2E_USER_DATA_PATH: path.join(temporaryRoot, 'user-data') },
+  });
+  try {
+    const result = await application.evaluate(async ({ app, utilityProcess }) => {
+      const entry = `${app.getAppPath()}/.vite/build/script_runtime_utility.js`;
+      return new Promise((resolve, reject) => {
+        const child = utilityProcess.fork(entry, [], { stdio: 'pipe' });
+        let stderr = '';
+        child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
+        const timer = setTimeout(() => { child.kill(); reject(new Error(`Runtime timed out: ${stderr}`)); }, 15_000);
+        child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`Runtime exited ${code}: ${stderr}`)); });
+        child.on('message', (message) => {
+          if (message.type === 'script-runtime.ready') {
+            child.postMessage({ type: 'script-runtime.run', executionId: 'packaged-runtime-smoke',
+              source: 'const value: number = 21; return value * 2;' });
+          } else if (message.type === 'script-runtime.completed') {
+            clearTimeout(timer); resolve(message.value); child.kill();
+          } else if (message.type === 'script-runtime.failed') {
+            clearTimeout(timer); reject(new Error(message.message)); child.kill();
+          }
+        });
+      });
+    });
+    expect(result).toBe(42);
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { force: true, recursive: true, maxRetries: 20, retryDelay: 250 });
+  }
+});
+
 test('the packaged application starts and completes a real Worker import', async () => {
   const executablePath = process.env.SERPENT_E2E_PACKAGED_EXECUTABLE;
   if (!executablePath) {

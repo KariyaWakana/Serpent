@@ -81,6 +81,9 @@ const requiredAsarEntries = [
   'plugin_standard_host.js',
   'plugin_trusted_host.js',
   'script_runtime_utility.js',
+  // The isolated scripting runtime transpiles user scripts after packaging.
+  // Forge prunes devDependencies, so TypeScript must ship as a runtime module.
+  'node_modules/typescript/lib/typescript.js',
 ];
 const missingAsarEntries = requiredAsarEntries.filter((entry) => {
   const normalized = entry.replaceAll('\\', '/');

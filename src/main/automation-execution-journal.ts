@@ -595,6 +595,13 @@ export class AutomationExecutionJournal implements AutomationExecutionResolver {
     }
     record.status = preAuthorized ? 'running' : 'awaiting-authorization';
     record.updatedAt = this.#now();
+    // Human consent is outside the sandbox's execution budget. No guest
+    // code or capability is available while this dialog is pending.
+    this.#clearDeadline(record.executionId);
+    if (preAuthorized) {
+      record.deadlineAt = new Date(this.#clock().getTime() + record.resourceBudget.maxWallTimeMs).toISOString();
+      this.#scheduleDeadline(record);
+    }
     this.#persist();
     this.#info(preAuthorized ? 'authorized' : 'awaiting-authorization', record, preAuthorized
       ? 'Saved-script authorization matched.'
@@ -644,6 +651,9 @@ export class AutomationExecutionJournal implements AutomationExecutionResolver {
     record.grantedCapabilities = [...grantedCapabilities];
     record.status = 'running';
     record.updatedAt = this.#now();
+    record.deadlineAt = new Date(this.#clock().getTime() + record.resourceBudget.maxWallTimeMs).toISOString();
+    this.#clearDeadline(record.executionId);
+    this.#scheduleDeadline(record);
     this.#persist();
     this.#info('authorized', record, 'Automation execution authorized.');
     return { ok: true, execution: safeRecord(record) };
