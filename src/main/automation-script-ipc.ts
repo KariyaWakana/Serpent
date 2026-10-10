@@ -57,7 +57,7 @@ export interface AutomationScriptIpcOptions {
   gateway(): AutomationCommandGateway | undefined;
   runtime(): ScriptRuntimeExecutor | undefined;
   scriptFiles?(): AutomationScriptFileService | undefined;
-  confirmDesktopWrite(): Promise<boolean>;
+  confirmDesktopWrite(confirmed: boolean): Promise<boolean>;
   logger(): AppLogger | undefined;
   undoGroup?(): AutomationUndoRecoveryHandler | undefined;
 }
@@ -291,15 +291,13 @@ export function registerAutomationScriptIpc(options: AutomationScriptIpcOptions)
         ...(sessionId === undefined ? {} : { sessionId }),
         declaredCapabilities,
       });
+      // Every run requires a fresh in-app review, including retained grants.
+      if (!await options.confirmDesktopWrite(parsed.data.confirmed === true)) {
+        journal.cancel(created.executionId);
+        return { ok: false, error: createPublicError('CANCELLED') };
+      }
       const started = journal.start(created.executionId);
       if (started?.status === 'awaiting-authorization') {
-        // Main creates an auditable execution before asking the user. If the
-        // dialog is declined it is explicitly cancelled rather than silently
-        // vanishing; saved scripts retain a grant only after this confirmation.
-        if (!await options.confirmDesktopWrite()) {
-          journal.cancel(created.executionId);
-          return { ok: false, error: createPublicError('CANCELLED') };
-        }
         const authorized = journal.authorizeFromDesktop({
           executionId: created.executionId,
           persistence: source === 'script' ? 'saved-script' : 'session',

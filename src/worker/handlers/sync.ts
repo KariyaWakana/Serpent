@@ -4,7 +4,6 @@ import {
   SYNC_ASSETS_DIR,
   SYNC_MANIFEST_FILE,
   SYNC_METADATA_DIR,
-  normalizeWebDAVBaseUrl,
   sanitizeSyncDirectoryName,
 } from '../../shared/sync-paths';
 import type { WorkerRequest } from '../../shared/protocol/requests';
@@ -12,10 +11,10 @@ import type { WorkerResult } from '../../shared/protocol/responses';
 import type { LibraryService } from '../library-service';
 import { parseManifest, serializeManifest } from '../sync/manifest';
 import { createLibrarySyncPort } from '../sync/library-port';
-import { parseSyncAssetMetadata } from '../sync/sync-metadata';
-import { RemoteStorageError } from '../sync/remote-storage';
+import { readRemoteMetadata } from '../sync/read-remote-metadata';
 import { SyncEngine, type SyncEngineOptions } from '../sync/sync-engine';
-import { WebDAVDriver } from '../sync/webdav-driver';
+import { createSyncDriver } from '../sync/create-driver';
+import { RemoteStorageError } from '../sync/remote-storage';
 
 function buildSyncEngine(
   libraryService: LibraryService,
@@ -25,22 +24,6 @@ function buildSyncEngine(
   return new SyncEngine(createLibrarySyncPort(libraryService), { deviceId, onProgress });
 }
 
-/**
- * 把用户输入的 baseUrl 规范化后再建 driver（http://、非法地址抛可读的 INVALID_URL，
- * 而不是 new URL 的 TypeError 落到 INTERNAL_ERROR 兜底）。所有 sync 命令入口统一走这里。
- */
-function syncWebDAVDriver(input: {
-  baseUrl: string;
-  username?: string;
-  password?: string;
-  allowInsecureTls?: boolean;
-}): WebDAVDriver {
-  const normalized = normalizeWebDAVBaseUrl(input.baseUrl);
-  if (!normalized.ok) {
-    throw new RemoteStorageError('INVALID_URL', normalized.error);
-  }
-  return new WebDAVDriver({ ...input, baseUrl: normalized.value });
-}
 
 export async function executeSyncWorkerCommand(
   libraryService: LibraryService,
@@ -50,7 +33,8 @@ export async function executeSyncWorkerCommand(
   switch (request.command.type) {
     case 'sync.probe': {
       // Serpent-xffq：连接级能力探测（不触碰库）。
-      const driver = syncWebDAVDriver({
+      const driver = createSyncDriver({
+        googleDrive: request.command.googleDrive,
         baseUrl: request.command.baseUrl,
         username: request.command.username,
         password: request.command.password,
@@ -60,14 +44,11 @@ export async function executeSyncWorkerCommand(
       return { ok: true, type: 'sync.probed', capabilities };
     }
     case 'sync.preview': {
-      const normalized = normalizeWebDAVBaseUrl(request.command.baseUrl);
-      if (!normalized.ok) {
-        throw new RemoteStorageError('INVALID_URL', normalized.error);
-      }
       const engine = buildSyncEngine(libraryService, request.command.deviceId);
       const report = await engine.previewSync(request.command.libraryId, {
         id: 'request',
-        baseUrl: normalized.value,
+        googleDrive: request.command.googleDrive,
+        baseUrl: request.command.baseUrl,
         username: request.command.username,
         password: request.command.password,
         allowInsecureTls: request.command.allowInsecureTls,
@@ -77,10 +58,6 @@ export async function executeSyncWorkerCommand(
     }
     case 'sync.run': {
       const libraryId = request.command.libraryId;
-      const normalized = normalizeWebDAVBaseUrl(request.command.baseUrl);
-      if (!normalized.ok) {
-        throw new RemoteStorageError('INVALID_URL', normalized.error);
-      }
       const engine = buildSyncEngine(libraryService, request.command.deviceId, (done, total, bytesDone, bytesTotal) => {
         if (parentPort) {
           parentPort.postMessage({
@@ -98,7 +75,8 @@ export async function executeSyncWorkerCommand(
       try {
         const outcome = await engine.syncOnce(libraryId, {
           id: 'request',
-          baseUrl: normalized.value,
+          googleDrive: request.command.googleDrive,
+          baseUrl: request.command.baseUrl,
           username: request.command.username,
           password: request.command.password,
           allowInsecureTls: request.command.allowInsecureTls,
@@ -155,6 +133,7 @@ export async function executeSyncWorkerCommand(
       const engine = buildSyncEngine(libraryService, request.command.deviceId);
       const changed = await engine.pollRemoteChange(request.command.libraryId, {
         id: 'request',
+        googleDrive: request.command.googleDrive,
         baseUrl: request.command.baseUrl,
         username: request.command.username,
         password: request.command.password,
@@ -177,7 +156,8 @@ export async function executeSyncWorkerCommand(
       };
     }
     case 'sync.list-remote-libraries': {
-      const driver = syncWebDAVDriver({
+      const driver = createSyncDriver({
+        googleDrive: request.command.googleDrive,
         baseUrl: request.command.baseUrl,
         username: request.command.username,
         password: request.command.password,
@@ -196,14 +176,16 @@ export async function executeSyncWorkerCommand(
             displayName: manifest.displayName,
             directoryName: manifest.directoryName,
           });
-        } catch {
+        } catch (error) {
+          if (request.command.googleDrive && (!(error instanceof RemoteStorageError) || error.code !== 'NOT_FOUND')) throw error;
           // 无有效 manifest 的目录不是同步库，跳过。
         }
       }
       return { ok: true, type: 'sync.remote-libraries', remoteLibraries: libraries };
     }
     case 'sync.open-remote-library': {
-      const driver = syncWebDAVDriver({
+      const driver = createSyncDriver({
+        googleDrive: request.command.googleDrive,
         baseUrl: request.command.baseUrl,
         username: request.command.username,
         password: request.command.password,
@@ -226,15 +208,14 @@ export async function executeSyncWorkerCommand(
       try {
         for (const [syncId, entry] of Object.entries(manifest.entries)) {
           const read = await driver.read(`${directoryName}/${SYNC_ASSETS_DIR}/${entry.path}`);
+          const metadata = await readRemoteMetadata(
+            driver, `${directoryName}/${SYNC_METADATA_DIR}/${syncId}.json`, entry, Boolean(request.command.googleDrive),
+          );
           libraryService.applySyncContentUpdate(created.libraryId, syncId, entry.path, read.body);
           try {
-            const sidecar = await driver.read(`${directoryName}/${SYNC_METADATA_DIR}/${syncId}.json`);
-            libraryService.applySyncAssetMetadata(
-              created.libraryId,
-              syncId,
-              parseSyncAssetMetadata(sidecar.body.toString('utf-8')),
-            );
-          } catch {
+            if (metadata) libraryService.applySyncAssetMetadata(created.libraryId, syncId, metadata);
+          } catch (error) {
+            if (request.command.googleDrive) throw error;
             // 无 sidecar：只落媒体。
           }
         }

@@ -38,8 +38,13 @@ test('reads recent entries and redacts credentials from messages and context', (
       { apiKey: 'sk-secret-value', reason: 'AI_AUTH' },
     );
 
+    logger.info('drive', 'refresh_token=PRIVATE-REFRESH client_secret=PRIVATE-SECRET', {
+      googleDrive: { refreshToken: 'PRIVATE-REFRESH', clientSecret: 'PRIVATE-SECRET' },
+    });
+    expect(readFileSync(logPath, 'utf8')).not.toContain('PRIVATE-');
+
     const entries = logger.readRecent();
-    expect(entries).toHaveLength(1);
+    expect(entries).toHaveLength(2);
     expect(entries[0]).toMatchObject({
       level: 'info',
       scope: 'ai.request.failed',

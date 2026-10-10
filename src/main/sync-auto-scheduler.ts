@@ -1,3 +1,4 @@
+import type { GoogleDriveCredentials } from '../shared/google-drive-sync';
 /**
  * 自动同步调度器（Serpent-bfsb 后续）。
  *
@@ -40,6 +41,7 @@ export interface SyncAutoSchedulerOptions {
   readBindings(): Record<string, SyncBindingLike>;
   writeBindings(bindings: Record<string, SyncBindingLike>): void;
   resolveCredentials(serverId: string): {
+    googleDrive?: GoogleDriveCredentials;
     baseUrl: string;
     username?: string;
     password?: string;
@@ -188,6 +190,7 @@ export class SyncAutoScheduler {
         type: 'sync.poll-remote',
         libraryId,
         deviceId: this.#options.deviceId(),
+        ...(credentials.googleDrive ? { googleDrive: credentials.googleDrive } : {}),
         baseUrl: credentials.baseUrl,
         username: credentials.username,
         password: credentials.password,
@@ -259,6 +262,7 @@ export class SyncAutoScheduler {
           type: 'sync.run',
           libraryId,
           deviceId: this.#options.deviceId(),
+          ...(credentials.googleDrive ? { googleDrive: credentials.googleDrive } : {}),
           baseUrl: credentials.baseUrl,
           username: credentials.username,
           password: credentials.password,

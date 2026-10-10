@@ -55,6 +55,7 @@ import {
   resolveOiiotoolPath,
 } from './binary-resolver';
 import { hasPdfCompatibleIllustratorHeader } from './illustrator-ai-format';
+import {convertDwgToDxf,DWG_PREVIEW_VERSION,DwgPreviewError,dwgConverterFingerprint,resolveDwgConverter} from './dwg-preview';
 import {
   dominantColorMetrics,
   extractRepresentativePalette,
@@ -23156,6 +23157,7 @@ export class LibraryService {
     const ext = path.extname(assetPath).toLowerCase();
     const imageDecoder = imageDecoderForExtension(ext);
     const viewerDecoder = imageViewerDecoderForExtension(ext);
+    if (ext === '.dxf' || ext === '.dwg') return null;
     if (mediaType === 'other' || (mediaType === 'image' && !imageDecoder)) {
       throw new LibraryServiceError('UNSUPPORTED_MEDIA_TYPE');
     }
@@ -28570,18 +28572,22 @@ export class LibraryService {
     mimeType: string;
     bytes: Uint8Array;
     generatorVersion: string;
+    fileExtension?: string;
+    expectedRevisionId?: string;
   }): { artifactId: string; filePath: string } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     const asset = openLibrary.connection
       .prepare('SELECT current_revision_id FROM assets WHERE asset_id = ? AND deleted_at IS NULL')
       .get(input.assetId) as { current_revision_id: string | null } | undefined;
     if (!asset?.current_revision_id) throw new LibraryServiceError('ASSET_NOT_FOUND');
+    if(input.expectedRevisionId && input.expectedRevisionId!==asset.current_revision_id)throw new LibraryServiceError('ASSET_NOT_FOUND');
     if (input.bytes.length === 0) {
       throw new LibraryServiceError('INTERNAL_ERROR');
     }
 
     const artifactId = randomUUID();
-    const artifactRelPath = `${artifactId}.${input.kind}`;
+    if(input.fileExtension&&!/^[a-z0-9]+$/.test(input.fileExtension))throw new LibraryServiceError('INTERNAL_ERROR');
+    const artifactRelPath = `${artifactId}.${input.fileExtension??input.kind}`;
     const artifactAbsPath = path.join(this.artifactsDir(openLibrary), artifactRelPath);
     mkdirSync(this.artifactsDir(openLibrary), { recursive: true });
     try {
@@ -28937,6 +28943,8 @@ export class LibraryService {
    * cards and worker tests; EXR selection is the only on-demand derivative
    * because each part needs a distinct OIIO decode.
    */
+  private readonly dwgPreviewFlights=new Map<string,Promise<{artifactId:string}>>();
+
   async resolvePreviewArtifact(
     libraryId: string,
     assetId: string,
@@ -28968,6 +28976,29 @@ export class LibraryService {
 
     const basePreview = this.getPreviewArtifact(libraryId, assetId, intent);
     const extension = path.extname(asset.relative_file_path).toLowerCase();
+    if(extension==='.dwg' && asset.current_revision_id){
+      // Hover/preloading never starts a native conversion. The full viewer
+      // caches its document representation in the existing viewer artifact slot.
+      if(intent!=='viewer')return {...basePreview,status:'missing',errorCode:'DWG_PREVIEW_ON_OPEN'};
+      const converter=resolveDwgConverter();const fingerprint=dwgConverterFingerprint(converter);
+      const generatorVersion=`${DWG_PREVIEW_VERSION};binary=${fingerprint??'PATH'}`;
+      const cached=this.getCurrentArtifact(libraryId,assetId,'viewer_image');
+      if(cached?.status==='ready' && cached.mimeType==='image/vnd.dxf' &&
+          (fingerprint?cached.generatorVersion===generatorVersion:cached.generatorVersion.startsWith(DWG_PREVIEW_VERSION+';'))){
+        try{this.getArtifactAbsolutePath(libraryId,cached.artifactId,'preview');return {mediaType:'document',status:'ready',kind:'thumbnail',artifactId:cached.artifactId,mimeType:'image/vnd.dxf'};}catch{/* Missing derivative is regenerated. */}
+      }
+      const key=`${libraryId}:${assetId}:${asset.current_revision_id}`;
+      let flight=this.dwgPreviewFlights.get(key);
+      if(!flight){
+        const revisionId=asset.current_revision_id;
+        const sourcePath=this.resolveAssetPath(libraryId,assetId);
+        flight=convertDwgToDxf(sourcePath,converter).then(bytes=>this.writeDerivedArtifact({libraryId,assetId,kind:'viewer_image',fileExtension:'dxf',mimeType:'image/vnd.dxf',bytes,generatorVersion,expectedRevisionId:revisionId}));
+        this.dwgPreviewFlights.set(key,flight);
+      }
+      try{const converted=await flight;return {mediaType:'document',status:'ready',kind:'thumbnail',artifactId:converted.artifactId,mimeType:'image/vnd.dxf'};}
+      catch(error){this.diagnose('cad.dwg-preview',error,{assetId});return {...basePreview,status:'failed',errorCode:error instanceof DwgPreviewError?error.code:'DWG_PREVIEW_FAILED'};}
+      finally{if(this.dwgPreviewFlights.get(key)===flight)this.dwgPreviewFlights.delete(key);}
+    }
     const decoder = imageDecoderForExtension(extension);
     const viewerDecoder = imageViewerDecoderForExtension(extension);
     const isRawAsset = isRawImageExtension(extension);
@@ -29253,6 +29284,8 @@ export class LibraryService {
       }
       const documentMime = extension === '.pdf' || extension === '.ai'
         ? 'application/pdf'
+        : extension === '.dxf'
+          ? 'image/vnd.dxf'
         : extension === '.html' || extension === '.htm'
           ? 'text/html'
           : 'application/octet-stream';
@@ -30080,6 +30113,7 @@ export class LibraryService {
       '.ai': 'application/pdf',
       '.html': 'text/html; charset=utf-8',
       '.htm': 'text/html; charset=utf-8',
+      '.dxf': 'image/vnd.dxf',
     };
     const mimeType = directImageMimeForExtension(extension)
       ?? videoMimeForExtension(extension)
@@ -30119,7 +30153,7 @@ export class LibraryService {
       ...IMAGE_EXTENSIONS,
       ...VIDEO_EXTENSIONS,
       ...MODEL_EXTENSIONS,
-      ...DOCUMENT_EXTENSIONS,
+      ...DOCUMENT_EXTENSIONS.filter((extension) => extension !== '.dxf' && extension !== '.dwg'),
     ];
     const hasSourceDimensions = columnsFor(openLibrary.connection, 'revision_artifacts').has('width')
       && columnsFor(openLibrary.connection, 'revision_artifacts').has('height');
@@ -31732,7 +31766,7 @@ export class LibraryService {
       ...VIDEO_EXTENSIONS.map((extension) => extension.slice(1)),
       ...AUDIO_EXTENSION_NAMES,
       ...MODEL_EXTENSIONS.map((extension) => extension.slice(1)),
-      ...DOCUMENT_EXTENSIONS.map((extension) => extension.slice(1)),
+      ...DOCUMENT_EXTENSIONS.filter((extension) => extension !== '.dxf' && extension !== '.dwg').map((extension) => extension.slice(1)),
       // Serpent-485aeb: font cards render a real sample line offscreen in Main.
       ...FONT_EXTENSIONS.map((extension) => extension.slice(1)),
     ];
@@ -36448,7 +36482,7 @@ export class LibraryService {
       truncated,
       byteSize: truncated ? maxBytes : buffer.length,
       lineCount: countTextLines(content),
-      editable: row.location_kind === 'managed' && !isTrashed,
+      editable: row.location_kind === 'managed' && !isTrashed && !truncated && extension !== '.ghx',
       mimeType: textMimeForExtension(extension) ?? 'text/plain',
     };
     this.cacheTextAssetPreview(cacheKey, value);
@@ -36508,6 +36542,12 @@ export class LibraryService {
 
     const absolutePath = this.resolveAssetPath(input.libraryId, input.assetId);
     const dir = path.dirname(absolutePath);
+    // GH XML is a structured definition preview, not a source editor. Never
+    // replace a file whose capped preview omitted the rest of its contents.
+    if (path.extname(row.relative_file_path).toLowerCase() === '.ghx'
+      || statSync(absolutePath).size > TEXT_VIEWER_MAX_BYTES) {
+      throw new LibraryServiceError('LIBRARY_NOT_WRITABLE');
+    }
     const tmpPath = path.join(dir, `.serpent-text-edit-${randomUUID()}.tmp`);
     const payload = Buffer.from(input.content, 'utf8');
     this.noteClientFilesystemMutation();

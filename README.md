@@ -6,6 +6,8 @@
 
 # Serpent
 
+> **本分支增加 Google Drive 原生同步（实验版）**：系统浏览器 OAuth、加密凭据、文件与元数据同步。适合 Windows / Mac 轮流使用，暂不支持同时写入同一库。[配置与限制](docs/user-guide/google-drive.md)。下方上游发布版下载不包含本分支功能，需从本分支构建。
+
 <div align="center">
 
 <img src="docs/assets/ui/Serpent-Logo.png" alt="Serpent-Logo" width="30%" />

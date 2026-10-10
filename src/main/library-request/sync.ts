@@ -1,3 +1,4 @@
+import type { GoogleDriveCredentials, GoogleDriveSetup } from '../../shared/google-drive-sync';
 import { randomUUID } from "node:crypto";
 
 import { normalizeWebDAVBaseUrl } from "../../shared/sync-paths";
@@ -7,6 +8,7 @@ import { createPublicError } from "../../shared/protocol/errors";
 import { WorkerRequestTimeoutError } from "../worker-client";
 
 export type SyncServerRecord = {
+  googleDrive?: { clientId: string; folderId: string };
   id: string;
   baseUrl: string;
   username?: string;
@@ -32,6 +34,7 @@ export type SyncBindingRecord = {
 };
 
 export type SyncOwnedRequestRuntime = {
+  authorizeGoogleDrive?: (setup: GoogleDriveSetup) => Promise<GoogleDriveCredentials>;
   readSyncServers: () => SyncServerRecord[];
   writeSyncServers: (servers: SyncServerRecord[]) => void;
   readSyncBindings: () => Record<string, SyncBindingRecord>;
@@ -58,6 +61,7 @@ export async function tryHandleSyncOwnedRequest(
   switch (request.type) {
     case "sync.servers.list.request": {
       const servers = runtime.readSyncServers().map((server) => ({
+        ...(server.googleDrive ? { googleDrive: server.googleDrive } : {}),
         id: server.id,
         baseUrl: server.baseUrl,
         username: server.username,
@@ -69,6 +73,32 @@ export async function tryHandleSyncOwnedRequest(
     case "sync.servers.upsert.request": {
       const servers = runtime.readSyncServers();
       const id = request.id ?? randomUUID();
+      const previous = servers.find((entry) => entry.id === id);
+      if (previous && (Boolean(previous.googleDrive) !== Boolean(request.googleDrive)
+        || (previous.googleDrive && (previous.googleDrive.clientId !== request.googleDrive?.clientId
+          || previous.googleDrive.folderId !== request.googleDrive?.folderId)))) {
+        return { ok: false, error: createPublicError("SYNC_CONNECTION_FAILED", "SYNC_CONFLICT") } satisfies RendererResult;
+      }
+      if (request.googleDrive) {
+        if (!runtime.authorizeGoogleDrive) throw new Error('Google Drive authorization is unavailable.');
+        const credentials = await runtime.authorizeGoogleDrive(request.googleDrive);
+        const record: SyncServerRecord = {
+          id, baseUrl: `https://drive.google.com/drive/folders/${credentials.folderId}`,
+          allowInsecureTls: false,
+          googleDrive: { clientId: credentials.clientId, folderId: credentials.folderId },
+          passwordEncrypted: runtime.encryptPassword(JSON.stringify({
+            refreshToken: credentials.refreshToken, clientSecret: credentials.clientSecret,
+          })),
+        };
+        // Authorization can take minutes: merge into the latest config, not a stale snapshot.
+        const latest = runtime.readSyncServers();
+        const index = latest.findIndex((entry) => entry.id === id);
+        if (index >= 0) latest[index] = record;
+        else latest.push(record);
+        runtime.writeSyncServers(latest);
+        return { ok: true, type: "sync.server.saved", id } satisfies RendererResult;
+      }
+
       // Serpent-fatf: 保存时即校验/规范化 URL（缺协议自动补 http://），
       // 让非法地址在保存瞬间给出可读提示，而不是等到连接时才报笼统错误。
       // 远端码体系已删除 INVALID_SYNC_URL，用 SYNC_CONNECTION_FAILED +
@@ -171,6 +201,7 @@ export function applySyncWorkerBindings(
     const syncBindings = runtime.readSyncBindings();
     const previous = syncBindings[request.libraryId];
     syncBindings[request.libraryId] = {
+      ...previous,
       serverId: request.serverId,
       directoryName: request.directoryName ?? effectiveSyncDirectoryName(previous),
       lastSyncedAt: runtime.now().toISOString(),
@@ -183,6 +214,7 @@ export function applySyncWorkerBindings(
     const syncBindings = runtime.readSyncBindings();
     const previous = syncBindings[request.libraryId];
     syncBindings[request.libraryId] = {
+      ...previous,
       serverId: request.serverId,
       directoryName: request.directoryName ?? effectiveSyncDirectoryName(previous),
       lastSyncedAt: runtime.now().toISOString(),

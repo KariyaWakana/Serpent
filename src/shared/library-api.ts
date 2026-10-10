@@ -1,10 +1,11 @@
+import type { SyncServerInput, SyncServerSummary } from './google-drive-sync';
 import type { PublicError, PublicErrorReason } from './protocol/errors';
 import type { LibraryNavigationSummary } from './library-navigation';
 import type { MutationReceipt } from './performance-contract';
 
 /** Serpent-xffq：WebDAV 服务端能力探测结果。 */
 export interface SyncCapabilities {
-  auth: 'none' | 'basic' | 'digest';
+  auth: 'none' | 'basic' | 'digest' | 'oauth2';
   supportsContentTransfer: boolean;
   supportsDepthInfinity: boolean;
   supportsEtagIfMatch: boolean;
@@ -707,9 +708,9 @@ export interface SerpentLibraryApi {
     scopeWarmAssetIds?: string[];
   }): Promise<void>;
   /** Serpent-xffq: 同步服务器列表（全局，Main 持有；密码不回传）。 */
-  syncListServers(): Promise<LibraryApiResult<Array<{ id: string; baseUrl: string; username?: string; hasPassword: boolean; allowInsecureTls: boolean }>>>;
+  syncListServers(): Promise<LibraryApiResult<Array<SyncServerSummary>>>;
   /** Serpent-xffq: 保存/新增同步服务器（密码经 Main safeStorage 加密）。 */
-  syncSaveServer(input: { id?: string; baseUrl: string; username?: string; password?: string; allowInsecureTls?: boolean }): Promise<LibraryApiResult<{ id: string }>>;
+  syncSaveServer(input: SyncServerInput): Promise<LibraryApiResult<{ id: string }>>;
   /** Serpent-xffq: 删除同步服务器。 */
   syncDeleteServer(input: { id: string }): Promise<LibraryApiResult<{ id: string }>>;
   /** Serpent-xffq: 保存库绑定（服务器 + 可选同步文件夹名，默认库名；enabled=自动同步开关；pollIntervalMs=云端轮询间隔；showCardSyncStatus=卡片同步状态）。 */

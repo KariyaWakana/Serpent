@@ -89,6 +89,7 @@ export function ScriptSandboxPreviewDialog({
   onExecutionSettled,
   onOpenExecutionLog,
   libraryId,
+  libraryDisplayName,
   automation,
 }: {
   open: boolean;
@@ -102,6 +103,7 @@ export function ScriptSandboxPreviewDialog({
   /** Opens the existing diagnostics surface scoped to this run's log ID. */
   onOpenExecutionLog?(logId: string): void;
   libraryId: string | null;
+  libraryDisplayName?: string;
   automation: SerpentAutomationScriptApi | undefined;
 }): ReactNode {
   const t = useT();
@@ -110,6 +112,9 @@ export function ScriptSandboxPreviewDialog({
   const [source, setSource] = useState('');
   const [savedScript, setSavedScript] = useState<SavedScript | null>(null);
   const [running, setRunning] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const startingRef = useRef(false);
+  const runGeneration = useRef(0);
   const [result, setResult] = useState<PreviewResult>(null);
   const [scriptFileMessage, setScriptFileMessage] = useState<string | null>(null);
   const [historyEntries, setHistoryEntries] = useState<AutomationScriptHistoryEntry[]>([]);
@@ -150,9 +155,17 @@ export function ScriptSandboxPreviewDialog({
     };
   }, [open, libraryId, automation, result]);
 
+  useEffect(() => {
+    runGeneration.current += 1;
+    setConfirming(false);
+    const executionId = executionIdRef.current;
+    if (executionId) void automation?.cancel({ executionId });
+  }, [libraryId, open, automation]);
+
   if (!open) return null;
 
-  const run = async (): Promise<void> => {
+  const run = async (confirmed = false): Promise<void> => {
+    if (running || startingRef.current) return;
     if (source.trim() === '') {
       setResult({
         kind: 'failed',
@@ -177,6 +190,14 @@ export function ScriptSandboxPreviewDialog({
       });
       return;
     }
+    if (!confirmed) {
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
+    const generation = runGeneration.current;
+    startingRef.current = true;
+    setRunning(true);
     setResult(null);
     setCompletedExecutionId(null);
     setUndoMessage(null);
@@ -186,9 +207,12 @@ export function ScriptSandboxPreviewDialog({
       started = await automation.start({
         libraryId,
         source,
+        confirmed: true,
         ...(savedScript === null ? {} : { scriptId: savedScript.scriptId }),
       });
     } catch {
+      startingRef.current = false;
+      setRunning(false);
       setResult({
         kind: 'failed',
         code: 'RUNTIME_ERROR',
@@ -196,7 +220,14 @@ export function ScriptSandboxPreviewDialog({
       });
       return;
     }
+    startingRef.current = false;
+    if (generation !== runGeneration.current) {
+      if (started.ok) void automation.cancel({ executionId: started.executionId });
+      setRunning(false);
+      return;
+    }
     if (!started.ok) {
+      setRunning(false);
       setCapabilities([]);
       setResult({
         kind: 'failed',
@@ -245,8 +276,10 @@ export function ScriptSandboxPreviewDialog({
   };
 
   const close = (): void => {
+    runGeneration.current += 1;
     const executionId = executionIdRef.current;
     if (executionId) void automation?.cancel({ executionId });
+    setConfirming(false);
     onClose();
   };
 
@@ -375,6 +408,16 @@ export function ScriptSandboxPreviewDialog({
           </button>
         }
       >
+        {confirming ? (
+          <section aria-label={t('automation.preview.reviewTitle')} className="script-sandbox-preview-consent">
+            <h3>{t('automation.preview.reviewTitle')}</h3>
+            <p>{t('automation.preview.reviewSource', { bytes: utf8ByteLength(source) })}</p>
+            <p>{t('automation.preview.reviewLibrary', { name: libraryDisplayName ?? libraryId ?? t('automation.preview.reviewNoLibrary') })}</p>
+            <p>{t('automation.preview.reviewScope')}</p>
+            <p className="field-help">{t('automation.preview.reviewLimits')}</p>
+          </section>
+        ) : null}
+        <div className="script-sandbox-preview-body" hidden={confirming}>
         <label className="script-sandbox-preview-label" htmlFor="script-sandbox-preview-source">
           {t('automation.preview.sourceLabel')}
         </label>
@@ -384,6 +427,7 @@ export function ScriptSandboxPreviewDialog({
           </p>
         ) : null}
         <textarea
+          disabled={running}
           autoCapitalize="off"
           autoCorrect="off"
           className="script-sandbox-preview-editor"
@@ -502,7 +546,16 @@ export function ScriptSandboxPreviewDialog({
           )}
         </div>
 
+        </div>
         <div className="dialog-actions">
+          {confirming ? (<>
+            <button className="secondary-button" onClick={() => setConfirming(false)} type="button">
+              {t('automation.preview.reviewBack')}
+            </button>
+            <button className="primary-button" onClick={() => void run(true)} type="button">
+              {t('automation.preview.reviewConfirm')}
+            </button>
+          </>) : (<>
           <button className="secondary-button" disabled={running} onClick={() => void openScript()} type="button">
             {t('automation.preview.openScript')}
           </button>
@@ -522,6 +575,7 @@ export function ScriptSandboxPreviewDialog({
           <button className="primary-button" disabled={running} onClick={() => void run()} type="button">
             {t('automation.preview.run')}
           </button>
+          </>)}
         </div>
       </DialogShell>
     </div>

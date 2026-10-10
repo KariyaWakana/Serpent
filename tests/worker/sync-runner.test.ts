@@ -28,6 +28,7 @@ class MemoryDriver implements RemoteStorageDriver {
   }
 
   async write(path: string, body: Buffer, options: RemoteWriteOptions = {}): Promise<RemoteWriteResult> {
+    if (options.overwrite === false && this.files.has(path)) throw new Error('destination exists');
     if (options.ifMatch && this.etags.get(path) && options.ifMatch !== this.etags.get(path)) {
       throw new Error('precondition failed');
     }
@@ -106,6 +107,56 @@ function buildContext(driver: MemoryDriver, local: Map<string, Buffer>): {
 }
 
 describe('runSyncActions end-to-end (Serpent-xffq)', () => {
+  it('uses a different protected backup for successive strict conflicts in the same minute', async () => {
+    const driver = new MemoryDriver();
+    const originalPath = '参考库/assets/file.ai';
+    const manifest = createEmptyManifest({ libraryId: 'lib-1', displayName: '参考库', directoryName: '参考库' });
+    const remote = { path: 'file.ai', contentHash: 'remote', size: 11, version: 2, deviceId: 'b', modifiedAt: '2026-10-10', metadataVersion: 1 };
+    const { context } = buildContext(driver, new Map([['a1', Buffer.from('local edit')]]));
+    context.failFast = true;
+    const paths: string[] = [];
+    for (const body of ['first remote edit', 'second remote edit']) {
+      driver.files.set(originalPath, Buffer.from(body));
+      const result = await runSyncActions([{ type: 'conflict', assetId: 'a1', winner: 'local', remote, local: { ...remote, contentHash: 'local' } }], manifest, context);
+      paths.push(result.conflicts[0]!.conflictCopyPath);
+    }
+    expect(paths[0]).not.toBe(paths[1]);
+    expect(driver.files.get(`参考库/assets/${paths[0]}`)?.toString()).toBe('first remote edit');
+    expect(driver.files.get(`参考库/assets/${paths[1]}`)?.toString()).toBe('second remote edit');
+  });
+
+  it.each(['local', 'remote'] as const)('preserves both originals when %s wins but the conflict backup fails', async (winner) => {
+    const driver = new MemoryDriver();
+    const originalPath = '参考库/assets/file.ai';
+    driver.files.set(originalPath, Buffer.from('remote edit'));
+    const originalWrite = driver.write.bind(driver);
+    driver.write = async (name, body, options) => {
+      if (name.includes('(conflict-')) throw new Error('backup denied');
+      return originalWrite(name, body, options);
+    };
+    const manifest = createEmptyManifest({ libraryId: 'lib-1', displayName: '参考库', directoryName: '参考库' });
+    const remote = { path: 'file.ai', contentHash: 'remote', size: 11, version: 2, deviceId: 'b', modifiedAt: '2026-10-10', metadataVersion: 1 };
+    const { context, writtenLocal } = buildContext(driver, new Map([['a1', Buffer.from('local edit')]]));
+    context.failFast = true;
+    await expect(runSyncActions([{ type: 'conflict', assetId: 'a1', winner, remote, local: { ...remote, contentHash: 'local' } }], manifest, context)).rejects.toThrow('backup denied');
+    expect(driver.files.get(originalPath)?.toString()).toBe('remote edit');
+    expect(writtenLocal.size).toBe(0);
+  });
+
+  it.each(['local', 'remote'] as const)('preserves both originals when %s wins but the local conflict copy fails', async (winner) => {
+    const driver = new MemoryDriver();
+    const originalPath = '参考库/assets/file.ai';
+    driver.files.set(originalPath, Buffer.from('remote edit'));
+    const manifest = createEmptyManifest({ libraryId: 'lib-1', displayName: '参考库', directoryName: '参考库' });
+    const remote = { path: 'file.ai', contentHash: 'remote', size: 11, version: 2, deviceId: 'b', modifiedAt: '2026-10-10', metadataVersion: 1 };
+    const { context, writtenLocal } = buildContext(driver, new Map([['a1', Buffer.from('local edit')]]));
+    context.failFast = true;
+    context.saveLocalConflictCopy = async () => { throw new Error('local disk full'); };
+    await expect(runSyncActions([{ type: 'conflict', assetId: 'a1', winner, remote, local: { ...remote, contentHash: 'local' } }], manifest, context)).rejects.toThrow('local disk full');
+    expect(driver.files.get(originalPath)?.toString()).toBe('remote edit');
+    expect(writtenLocal.size).toBe(0);
+  });
+
   it('uploads a new asset, writes manifest entries and stores remote content', async () => {
     const driver = new MemoryDriver();
     const manifest = createEmptyManifest({ libraryId: 'lib-1', displayName: '参考库', directoryName: '参考库' });

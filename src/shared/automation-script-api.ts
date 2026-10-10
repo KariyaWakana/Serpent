@@ -82,6 +82,8 @@ export type PluginHostCommandId = z.infer<typeof pluginHostCommandIdSchema>;
 export const automationScriptStartInputSchema = z.strictObject({
   libraryId: identifier.nullable(),
   source: automationScriptSourceSchema,
+  /** Explicit approval from the desktop's in-app review panel. */
+  confirmed: z.boolean().optional(),
   /** Main-issued handle for exact text loaded from or saved to a script file. */
   scriptId: identifier.optional(),
 });

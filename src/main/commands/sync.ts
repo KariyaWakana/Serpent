@@ -1,3 +1,4 @@
+import type { GoogleDriveCredentials } from '../../shared/google-drive-sync';
 import type { RendererRequest, WorkerCommand } from "../../shared/protocol/requests";
 import {
   selectOpenDirectory,
@@ -5,6 +6,7 @@ import {
 } from "../native-dialogs";
 
 export type SyncCommandCredentials = {
+  googleDrive?: GoogleDriveCredentials;
   baseUrl: string;
   username?: string;
   password?: string;
@@ -33,6 +35,7 @@ export async function executeSyncMainCommand(
       if (!server) throw new Error("同步服务器不存在，请先在通用设置中配置。");
       return {
         type: "sync.probe",
+        ...(server.googleDrive ? { googleDrive: server.googleDrive } : {}),
         baseUrl: server.baseUrl,
         username: server.username,
         password: server.password,
@@ -46,6 +49,7 @@ export async function executeSyncMainCommand(
         type: "sync.preview",
         libraryId: request.libraryId,
         deviceId: runtime.syncDeviceId(),
+        ...(server.googleDrive ? { googleDrive: server.googleDrive } : {}),
         baseUrl: server.baseUrl,
         username: server.username,
         password: server.password,
@@ -60,6 +64,7 @@ export async function executeSyncMainCommand(
         type: "sync.run",
         libraryId: request.libraryId,
         deviceId: runtime.syncDeviceId(),
+        ...(server.googleDrive ? { googleDrive: server.googleDrive } : {}),
         baseUrl: server.baseUrl,
         username: server.username,
         password: server.password,
@@ -72,6 +77,7 @@ export async function executeSyncMainCommand(
       if (!server) throw new Error("同步服务器不存在，请先在通用设置中配置。");
       return {
         type: "sync.list-remote-libraries",
+        ...(server.googleDrive ? { googleDrive: server.googleDrive } : {}),
         baseUrl: server.baseUrl,
         username: server.username,
         password: server.password,
@@ -91,6 +97,7 @@ export async function executeSyncMainCommand(
       if (!selectedParentPath) return undefined;
       return {
         type: "sync.open-remote-library",
+        ...(server.googleDrive ? { googleDrive: server.googleDrive } : {}),
         baseUrl: server.baseUrl,
         username: server.username,
         password: server.password,

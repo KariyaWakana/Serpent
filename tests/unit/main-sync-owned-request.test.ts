@@ -22,6 +22,47 @@ function runtime(overrides?: Partial<SyncOwnedRequestRuntime>): SyncOwnedRequest
   };
 }
 
+test("Google Drive authorizes in Main and lists only public connection fields", async () => {
+  let records: SyncServerRecord[] = [];
+  const host = runtime({
+    readSyncServers: () => records,
+    writeSyncServers: (value) => { records = value; },
+    authorizeGoogleDrive: async () => ({ clientId: 'desktop-client', folderId: 'folder-1', refreshToken: 'PRIVATE-REFRESH', clientSecret: 'PRIVATE-SECRET' }),
+  });
+  await expect(tryHandleSyncOwnedRequest({
+    type: 'sync.servers.upsert.request', baseUrl: 'https://drive.google.com',
+    googleDrive: { clientId: 'desktop-client' },
+  }, host)).resolves.toMatchObject({ ok: true, type: 'sync.server.saved' });
+  expect(records[0]!.passwordEncrypted).toContain('enc:');
+  const listed = await tryHandleSyncOwnedRequest({ type: 'sync.servers.list.request' }, host);
+  expect(listed).toMatchObject({ ok: true, servers: [{ googleDrive: { clientId: 'desktop-client', folderId: 'folder-1' } }] });
+  expect(JSON.stringify(listed)).not.toContain('PRIVATE');
+});
+
+test("a cancelled Google authorization does not replace existing credentials", async () => {
+  const writeSyncServers = vi.fn();
+  await expect(tryHandleSyncOwnedRequest({
+    type: 'sync.servers.upsert.request', id: 'server-1', baseUrl: 'https://drive.google.com',
+    googleDrive: { clientId: 'desktop-client' },
+  }, runtime({ writeSyncServers, authorizeGoogleDrive: async () => { throw new Error('cancelled'); } }))).rejects.toThrow('cancelled');
+  expect(writeSyncServers).not.toHaveBeenCalled();
+});
+
+test("sync completion preserves the user's poll interval and card-status preference", () => {
+  const writeSyncBindings = vi.fn();
+  applySyncWorkerBindings({ type: 'sync.run.request', libraryId: 'lib-1', serverId: 'drive' }, {
+    ok: true, type: 'sync.completed', report: {
+      libraryDirectory: 'Library', newLocal: 0, newRemote: 0, uploads: 0, downloads: 0,
+      conflicts: 0, remoteDeletes: 0, localRecycles: 0,
+      capabilities: { auth: 'oauth2', supportsContentTransfer: true, supportsDepthInfinity: true, supportsEtagIfMatch: false, supportsMove: true, supportsLock: false },
+    }, conflicts: [],
+  }, {
+    readSyncBindings: () => ({ 'lib-1': { serverId: 'drive', enabled: true, pollIntervalMs: 60_000, showCardSyncStatus: false } }),
+    writeSyncBindings, now: () => new Date('2026-10-10'),
+  });
+  expect(writeSyncBindings).toHaveBeenCalledWith({ 'lib-1': expect.objectContaining({ pollIntervalMs: 60_000, showCardSyncStatus: false }) });
+});
+
 test("unrelated renderer requests fall through", async () => {
   await expect(tryHandleSyncOwnedRequest(
     { type: "folder.list.request", libraryId: "lib-1" },

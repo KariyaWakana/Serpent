@@ -18,6 +18,10 @@ import {
 } from '../../src/shared/media-formats';
 
 describe('media format registry', () => {
+  it('recognizes native CAD drawings as documents',()=>{
+    expect(isSupportedDocumentExtension('plan.DWG')).toBe(true);
+    expect(isSupportedDocumentExtension('section.dxf')).toBe(true);
+  });
   it('routes web-native and derived images through the intended decoder', () => {
     expect(imageDecoderForExtension('poster.PNG')).toBe('sharp');
     expect(imageDecoderForExtension('poster.JFIF')).toBe('sharp');

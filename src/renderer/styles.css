@@ -14113,3 +14113,51 @@ select.ai-config-input.ai-config-languages {
   justify-content: space-between;
   gap: var(--ui-space-3);
 }
+
+.script-sandbox-preview-consent { padding: 8px 0 20px; line-height: 1.7; }
+.script-sandbox-preview-consent h3 { margin: 0 0 12px; }
+.script-sandbox-preview-consent p { margin: 0 0 12px; }
+
+.script-sandbox-preview-body:not([hidden]) { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+
+.script-sandbox-preview-consent .field-help { font-size: calc(12px * var(--ui-font-scale)); line-height: 1.6; }
+
+.script-sandbox-preview-dialog > [data-dialog-content="true"] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+.script-sandbox-preview-body:not([hidden]) { flex: 1 1 auto; }
+.script-sandbox-preview-body > * { flex-shrink: 0; }
+.script-sandbox-preview-dialog .dialog-actions { flex: 0 0 auto; }
+/* Read-only CAD and code surfaces keep their tools inside the application. */
+.preview-cad { display:flex;flex-direction:column;width:100%;height:100%;min-height:0;background:var(--viewer-stage);color:var(--text); }
+.preview-cad-toolbar { display:flex;align-items:center;gap:16px;padding:12px 20px;flex-shrink:0; }
+.preview-cad-toolbar span { flex:1;font-size:13px;color:var(--secondary); }
+.preview-cad-toolbar button { padding:6px 12px; }
+.preview-cad-body { flex:1;min-height:0;position:relative;display:flex; }
+.preview-cad-layers { width:200px;flex-shrink:0;overflow:auto;padding:16px;background:var(--raised);color:var(--text); }
+.preview-cad-layers label { display:flex;align-items:center;gap:8px;margin:14px 0;font-size:12px;overflow-wrap:anywhere; }
+.preview-cad-canvas { flex:1;min-width:0;min-height:0;position:relative; }
+.preview-cad-status { position:absolute;left:240px;right:30px;top:35%;text-align:center;pointer-events:none;color:#d2dae3; }
+.preview-cad-notice { padding:10px 20px;font-size:12px;color:var(--secondary);flex-shrink:0;line-height:1.6; }
+.preview-code-search { width:180px;padding:5px 8px;background:transparent;color:inherit;border:1px solid #4b5668;border-radius:5px; }
+.preview-code-read { margin:0;padding:12px 0;line-height:22px;font-size:13px;tab-size:4;font-family:var(--font-mono,monospace);min-width:max-content; }
+.preview-code-read.is-wrap { white-space:pre-wrap;overflow-wrap:anywhere;min-width:0; }
+.preview-code-read > div { display:flex;min-height:22px; }
+.preview-code-read code { display:block;flex:1;padding-right:20px; }
+.preview-code-number { display:inline-block;color:#808fa5;min-width:60px;padding:0 15px;text-align:right;user-select:none;flex-shrink:0; }
+.preview-code-read .is-match { background:#544a2c; }
+.preview-code-read .hljs-comment { color:#8da18d; }
+.preview-code-read .hljs-string,.preview-code-read .hljs-attr { color:#c8d99e; }
+.preview-code-read .hljs-keyword,.preview-code-read .hljs-tag { color:#ccacf3; }
+.preview-code-read .hljs-number,.preview-code-read .hljs-literal { color:#edbb8d; }
+.preview-code-read .hljs-title,.preview-code-read .hljs-built_in { color:#8ecbdd; }
+.preview-text-actions .preview-text-action.is-code-label { width:auto;min-width:44px;padding:0 9px;white-space:nowrap; }
+[data-theme="light"] .preview-code-read .hljs-comment { color:#546a50; }
+[data-theme="light"] .preview-code-read .hljs-string,[data-theme="light"] .preview-code-read .hljs-attr { color:#476521; }
+[data-theme="light"] .preview-code-read .hljs-keyword,[data-theme="light"] .preview-code-read .hljs-tag { color:#713c9e; }
+[data-theme="light"] .preview-code-read .hljs-number,[data-theme="light"] .preview-code-read .hljs-literal { color:#934821; }
+[data-theme="light"] .preview-code-read .hljs-title,[data-theme="light"] .preview-code-read .hljs-built_in { color:#13677e; }
+[data-theme="light"] .preview-code-read .is-match { background:#f1e5b6; }

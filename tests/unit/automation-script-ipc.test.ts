@@ -317,9 +317,9 @@ describe('Desktop Console automation IPC', () => {
       gateway: () => gateway,
       runtime: () => ({ run: async () => ({ ok: true, value: undefined, output: [], transpiledJavaScript: '' }) }) satisfies ScriptRuntimeExecutor,
       scriptFiles: () => scriptFiles,
-      confirmDesktopWrite: async () => {
+      confirmDesktopWrite: async (confirmed) => {
         confirmations += 1;
-        return true;
+        return confirmed;
       },
       logger: () => undefined,
     });
@@ -332,12 +332,16 @@ describe('Desktop Console automation IPC', () => {
       throw new Error('Expected a saved script handle.');
     }
 
-    const first = await handlers.get(AUTOMATION_SCRIPT_START_CHANNEL)!(event, { libraryId, source, scriptId: saved.scriptId });
+    const first = await handlers.get(AUTOMATION_SCRIPT_START_CHANNEL)!(event, { libraryId, source, scriptId: saved.scriptId, confirmed: true });
     expect(first).toMatchObject({ ok: true, executionId: 'execution-1' });
     expect(confirmations).toBe(1);
-    const second = await handlers.get(AUTOMATION_SCRIPT_START_CHANNEL)!(event, { libraryId, source, scriptId: saved.scriptId });
+    const second = await handlers.get(AUTOMATION_SCRIPT_START_CHANNEL)!(event, { libraryId, source, scriptId: saved.scriptId, confirmed: true });
     expect(second).toMatchObject({ ok: true, executionId: 'execution-3' });
-    expect(confirmations).toBe(1);
+    expect(confirmations).toBe(2);
+    await expect(handlers.get(AUTOMATION_SCRIPT_START_CHANNEL)!(event, {
+      libraryId, source, scriptId: saved.scriptId, confirmed: false,
+    })).resolves.toMatchObject({ ok: false, error: { code: 'CANCELLED' } });
+    expect(confirmations).toBe(3);
     await expect(handlers.get(AUTOMATION_SCRIPT_START_CHANNEL)!(event, {
       libraryId,
       scriptId: saved.scriptId,
