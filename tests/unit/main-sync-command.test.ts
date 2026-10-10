@@ -17,6 +17,16 @@ const runtime = {
   }),
 };
 
+test("Google Drive credentials reach the worker for manual sync and remote browsing", async () => {
+  const googleDrive = { clientId: 'desktop', folderId: 'root-id', refreshToken: 'main-only-token' };
+  for (const type of ['sync.probe.request', 'sync.list-remote-libraries.request', 'sync.preview.request', 'sync.run.request'] as const) {
+    const command = await executeSyncMainCommand({ type, serverId: 'drive', libraryId: 'lib-1' }, {
+      ...runtime, resolveSyncServerCredentials: () => ({ baseUrl: 'https://drive.google.com', googleDrive, allowInsecureTls: false }),
+    });
+    expect(command).toMatchObject({ googleDrive });
+  }
+});
+
 test("sync.probe throws when the server is missing", async () => {
   await expect(executeSyncMainCommand(
     { type: "sync.probe.request", serverId: "missing" },

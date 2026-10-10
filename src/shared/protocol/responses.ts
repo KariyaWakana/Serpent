@@ -53,7 +53,7 @@ const rendererLibraryRecoverySchema = z.strictObject({
 
 /** Serpent-xffq: WebDAV 能力探测结果（probe/preview/run 的 report 内均带）。 */
 const syncCapabilitiesSchema = z.strictObject({
-  auth: z.enum(['none', 'basic', 'digest']),
+  auth: z.enum(['none', 'basic', 'digest', 'oauth2']),
   supportsContentTransfer: z.boolean(),
   supportsDepthInfinity: z.boolean(),
   supportsEtagIfMatch: z.boolean(),
@@ -2317,6 +2317,7 @@ const rendererSuccessResultSchema = z.discriminatedUnion('type', [
       username: z.string().optional(),
       hasPassword: z.boolean(),
       allowInsecureTls: z.boolean(),
+      googleDrive: z.strictObject({ clientId: nonBlankString, folderId: nonBlankString }).optional(),
     })),
   }),
   z.strictObject({

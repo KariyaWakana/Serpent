@@ -6,6 +6,7 @@
 - [基本使用](basics.md)——资源库、导入、工作区多标签页、文件夹/合集自定义外观、浏览排版、标签合集与查看器
 - [搜索与过滤](search-and-filters.md)——高级搜索语法、过滤维度和 Shift 多选
 - [WebDAV 云同步](sync.md)——服务器配置、资源库绑定、自动同步与打开远端同步库
+- [Google Drive 同步（本分支实验功能）](google-drive.md)——桌面 OAuth 配置、Windows / Mac 轮流使用和限制
 - [AI 分析](ai.md)——支持的资产、自动/手动分析、任务进度和隐私提示
 - [浏览器扩展](browser-extension.md)——Chrome / Edge / Firefox 保存网页图片视频
 - [插件使用](plugins.md)——安装、启用、更新和卸载插件

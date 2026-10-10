@@ -1,3 +1,6 @@
+import { authorizeGoogleDrive } from './google-drive-oauth';
+import { GoogleDriveDriver } from '../worker/sync/google-drive-driver';
+import type { GoogleDriveCredentials } from '../shared/google-drive-sync';
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -1152,6 +1155,7 @@ function writeSyncBindings(bindings: Record<string, SyncBindingRecord>): void {
 }
 
 function resolveSyncServerCredentials(serverId: string): {
+  googleDrive?: GoogleDriveCredentials;
   baseUrl: string;
   username?: string;
   password?: string;
@@ -1166,6 +1170,14 @@ function resolveSyncServerCredentials(serverId: string): {
     } catch {
       password = undefined;
     }
+  }
+  if (server.googleDrive) {
+    if (!password) throw new Error('Google Drive: reconnect this account; local credentials could not be decrypted.');
+    const stored = JSON.parse(password) as { refreshToken: string; clientSecret?: string };
+    return {
+      baseUrl: server.baseUrl, allowInsecureTls: false,
+      googleDrive: { ...server.googleDrive, ...stored },
+    };
   }
   return {
     baseUrl: server.baseUrl,
@@ -2700,6 +2712,18 @@ async function handleLibraryRequest(
 
     // Serpent-xffq: 同步服务器与库绑定是 Main 本地配置（凭据经 safeStorage）。
     const syncOwnedResult = await tryHandleSyncOwnedRequest(request, {
+      authorizeGoogleDrive: async (setup) => {
+        if (!safeStorage.isEncryptionAvailable()
+          || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) {
+          throw new Error('Google Drive requires a secure operating-system credential store.');
+        }
+        const tokens = await authorizeGoogleDrive(setup, (url) => shell.openExternal(url));
+        const credentials: GoogleDriveCredentials = { ...setup, ...tokens, folderId: setup.folderId || 'root' };
+        const driver = new GoogleDriveDriver(credentials);
+        if (!setup.folderId) credentials.folderId = await driver.ensureAppRoot();
+        await new GoogleDriveDriver(credentials).probe();
+        return credentials;
+      },
       readSyncServers,
       writeSyncServers,
       readSyncBindings,

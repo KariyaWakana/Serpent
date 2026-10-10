@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { SyncCapabilities } from "../shared/library-api";
+import type { SyncServerInput } from "../shared/google-drive-sync";
 import { Icon } from "./Icons";
 import { iconActionAttrs } from "./icon-action-attrs";
 import { useT } from "./i18n";
@@ -10,7 +11,7 @@ import type { SyncServerSummary } from "./sync-settings-types";
 
 export interface SyncServerSettingsCallbacks {
   syncListServers(): Promise<{ ok: true; value: SyncServerSummary[] } | { ok: false; message: string }>;
-  syncSaveServer(input: { id?: string; baseUrl: string; username?: string; password?: string; allowInsecureTls?: boolean }): Promise<{ ok: true; value: { id: string } } | { ok: false; message: string }>;
+  syncSaveServer(input: SyncServerInput): Promise<{ ok: true; value: { id: string } } | { ok: false; message: string }>;
   syncDeleteServer(input: { id: string }): Promise<{ ok: true } | { ok: false; message: string }>;
   syncProbe(input: { serverId: string }): Promise<{ ok: true; value: SyncCapabilities } | { ok: false; message: string }>;
 }
@@ -48,6 +49,10 @@ export function SyncSettingsPage({
   const [connections, setConnections] = useState<Record<string, ServerConnection>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [baseUrl, setBaseUrl] = useState("");
+  const [provider, setProvider] = useState<"webdav" | "google-drive">("webdav");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [folderId, setFolderId] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -98,6 +103,10 @@ export function SyncSettingsPage({
 
   const resetForm = () => {
     setEditingId(null);
+    setProvider("webdav");
+    setClientId("");
+    setClientSecret("");
+    setFolderId("");
     setBaseUrl("");
     setUsername("");
     setPassword("");
@@ -108,6 +117,10 @@ export function SyncSettingsPage({
 
   const startEdit = (server: SyncServerSummary) => {
     setEditingId(server.id);
+    setProvider(server.googleDrive ? "google-drive" : "webdav");
+    setClientId(server.googleDrive?.clientId ?? "");
+    setClientSecret("");
+    setFolderId(server.googleDrive?.folderId ?? "");
     setBaseUrl(server.baseUrl);
     setUsername(server.username ?? "");
     setPassword("");
@@ -117,7 +130,7 @@ export function SyncSettingsPage({
   };
 
   const saveServer = async () => {
-    const url = baseUrl.trim();
+    const url = provider === "google-drive" ? "https://drive.google.com" : baseUrl.trim();
     if (!url) return;
     setBusy("save");
     setError(null);
@@ -126,18 +139,24 @@ export function SyncSettingsPage({
       const saved = await callbacks.syncSaveServer({
         id: editingId ?? undefined,
         baseUrl: url,
+        ...(provider === "google-drive" ? { googleDrive: {
+          clientId: clientId.trim(), clientSecret: clientSecret.trim() || undefined,
+          folderId: folderId.trim() || undefined,
+        } } : {}),
         username: username.trim() || undefined,
         password: password || undefined,
         allowInsecureTls: allowInsecureTls || undefined,
       });
       if (!saved.ok) {
-        setError(saved.message);
+        setError(provider === "google-drive" ? t("settings.sync.googleError") : saved.message);
         return;
       }
-      setNotice(t("settings.sync.saved"));
       resetForm();
+      setNotice(t("settings.sync.saved"));
       await reload();
       void probeServer(saved.value.id);
+    } catch {
+      setError(t("settings.sync.googleError"));
     } finally {
       setBusy(null);
     }
@@ -202,9 +221,9 @@ export function SyncSettingsPage({
               {index > 0 ? <div className="app-settings-card-divider" /> : null}
               <div className="app-settings-action-row">
                 <div className="app-settings-row-copy">
-                  <strong>{server.baseUrl}</strong>
+                  <strong>{server.googleDrive ? `Google Drive · ${server.googleDrive.folderId}` : server.baseUrl}</strong>
                   <span>
-                    {server.username
+                    {server.googleDrive ? t("settings.sync.googleConnected") : server.username
                       ? t("settings.sync.serverSummary", {
                           username: server.username,
                           password: server.hasPassword ? t("settings.sync.passwordStored") : t("settings.sync.passwordNone"),
@@ -243,6 +262,26 @@ export function SyncSettingsPage({
         <strong>{editingId ? t("settings.sync.editServer") : t("settings.sync.addServer")}</strong>
       </div>
       <div className="app-settings-row app-settings-row-stack">
+        <label htmlFor="sync-provider">{t("settings.sync.provider")}</label>
+        <select id="sync-provider" className="text-field" disabled={busy !== null || editingId !== null} value={provider} onChange={(event) => setProvider(event.target.value as "webdav" | "google-drive")}>
+          <option value="webdav">WebDAV</option>
+          <option value="google-drive">Google Drive</option>
+        </select>
+      </div>
+      {provider === "google-drive" ? <>
+        <p className="app-settings-help-note">{t("settings.sync.googleSetupHint")}</p>
+        <div className="app-settings-row app-settings-row-stack">
+          <label htmlFor="google-client-id">{t("settings.sync.googleClientId")}</label>
+          <input id="google-client-id" className="text-field" value={clientId} disabled={busy !== null || editingId !== null} onChange={(event) => setClientId(event.target.value)} placeholder="…apps.googleusercontent.com" />
+          <label htmlFor="google-client-secret">{t("settings.sync.googleClientSecret")}</label>
+          <input id="google-client-secret" className="text-field" type="password" autoComplete="off" value={clientSecret} disabled={busy !== null} onChange={(event) => setClientSecret(event.target.value)} />
+          <label htmlFor="google-folder-id">{t("settings.sync.googleFolderId")}</label>
+          <input id="google-folder-id" className="text-field" value={folderId} disabled={busy !== null || editingId !== null} onChange={(event) => setFolderId(event.target.value)} />
+          <span className="app-settings-help-note">{t("settings.sync.googleFolderHint")}</span>
+        </div>
+        <p className="app-settings-help-note">{t("settings.sync.googleConcurrencyHint")}</p>
+      </> : <>
+      <div className="app-settings-row app-settings-row-stack">
         <div className="app-settings-row-copy">
           <strong>{t("settings.sync.webdavUrl")}</strong>
           <span>{t("settings.sync.webdavUrlHint")}</span>
@@ -278,6 +317,7 @@ export function SyncSettingsPage({
         </div>
         <input type="checkbox" checked={allowInsecureTls} onChange={(event) => setAllowInsecureTls(event.target.checked)} />
       </div>
+      </>}
       {error ? <p className="settings-error-message">{error}</p> : null}
       {notice ? <p className="settings-success-message">{notice}</p> : null}
       <div className="app-settings-action-row">
@@ -288,8 +328,8 @@ export function SyncSettingsPage({
               {t("common.cancel")}
             </button>
           ) : null}
-          <button className="primary-button" disabled={busy !== null || !baseUrl.trim()} onClick={() => void saveServer()} type="button">
-            {busy === "save" ? t("common.saving") : t("common.save")}
+          <button className="primary-button" disabled={busy !== null || (provider === "google-drive" ? !clientId.trim() : !baseUrl.trim())} onClick={() => void saveServer()} type="button">
+            {busy === "save" ? (provider === "google-drive" ? t("settings.sync.googleConnecting") : t("common.saving")) : (provider === "google-drive" ? t("settings.sync.googleConnect") : t("common.save"))}
           </button>
         </div>
       </div>

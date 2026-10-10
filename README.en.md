@@ -6,6 +6,8 @@
 
 # Serpent
 
+> **This branch adds experimental native Google Drive sync** with system-browser OAuth, encrypted credentials, and file/metadata synchronization. Use Windows and Mac sequentially; simultaneous writers are unsupported. [Setup and limitations](docs/user-guide/google-drive.md). Upstream release downloads below do not include this feature; build this branch.
+
 <div align="center">
 
 <img src="docs/assets/ui/Serpent-Logo.png" alt="Serpent-Logo" width="30%" />

@@ -51,6 +51,8 @@ export async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 export interface SyncRunnerContext {
+  /** Providers without conditional writes must surface partial failures before committing a manifest. */
+  failFast?: boolean;
   driver: RemoteStorageDriver;
   /** 安全化后的库目录名（远端根下的子目录）。 */
   libraryDirectory: string;
@@ -170,7 +172,8 @@ export async function runSyncActions(
         assetPath,
         metadataPath,
       });
-    } catch {
+    } catch (error) {
+      if (context.failFast) throw error;
       result.failed += 1;
     } finally {
       context.onActionComplete?.();

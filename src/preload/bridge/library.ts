@@ -1,3 +1,4 @@
+import type { SyncServerInput, SyncServerSummary } from '../../shared/google-drive-sync';
 // A sandboxed preload cannot load `node:crypto` — importing it here makes the
 // whole preload fail (`Unable to load preload script`), which leaves the
 // renderer without the `serpent` bridge. Web Crypto is available in the
@@ -1993,14 +1994,14 @@ export const library: SerpentLibraryApi = Object.freeze({
   },
 
   // Serpent-xffq: 同步服务器（全局）与库绑定（Main 本地，密码 safeStorage）。
-  async syncListServers(): Promise<LibraryApiResult<Array<{ id: string; baseUrl: string; username?: string; hasPassword: boolean; allowInsecureTls: boolean }>>> {
+  async syncListServers(): Promise<LibraryApiResult<Array<SyncServerSummary>>> {
     const result = await request({ type: 'sync.servers.list.request' });
     if (!result.ok) return failure(result);
     if (result.type !== 'sync.servers.listed') throw new Error('Unexpected sync servers response.');
     return { ok: true, value: result.servers };
   },
-  async syncSaveServer({ id, baseUrl, username, password, allowInsecureTls }: { id?: string; baseUrl: string; username?: string; password?: string; allowInsecureTls?: boolean }): Promise<LibraryApiResult<{ id: string }>> {
-    const result = await request({ type: 'sync.servers.upsert.request', id, baseUrl, username, password, allowInsecureTls });
+  async syncSaveServer({ id, baseUrl, username, password, allowInsecureTls, googleDrive }: SyncServerInput): Promise<LibraryApiResult<{ id: string }>> {
+    const result = await request({ type: 'sync.servers.upsert.request', id, baseUrl, username, password, allowInsecureTls, googleDrive });
     if (!result.ok) return failure(result);
     if (result.type !== 'sync.server.saved') throw new Error('Unexpected sync server response.');
     return { ok: true, value: { id: result.id } };

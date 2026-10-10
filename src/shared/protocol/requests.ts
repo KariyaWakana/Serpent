@@ -19,6 +19,11 @@ import {
   entityAppearanceTargetSchema,
 } from '../entity-appearance';
 
+const googleDriveSetupSchema = z.strictObject({
+  clientId: z.string().min(1), clientSecret: z.string().optional(), folderId: z.string().optional(),
+});
+const googleDriveCredentialsSchema = googleDriveSetupSchema.required({ folderId: true }).extend({ refreshToken: z.string().min(1) });
+
 const nonBlankString = z.string().min(1).refine((value) => value.trim().length > 0, {
   message: 'Value must not be blank.',
 });
@@ -1127,6 +1132,7 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('sync.servers.upsert.request'),
+    googleDrive: googleDriveSetupSchema.optional(),
     id: identifierSchema.optional(),
     baseUrl: nonBlankString,
     username: z.string().optional(),
@@ -1428,6 +1434,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('sync.probe'),
+    googleDrive: googleDriveCredentialsSchema.optional(),
     baseUrl: nonBlankString,
     username: z.string().optional(),
     password: z.string().optional(),
@@ -1435,6 +1442,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('sync.list-remote-libraries'),
+    googleDrive: googleDriveCredentialsSchema.optional(),
     baseUrl: nonBlankString,
     username: z.string().optional(),
     password: z.string().optional(),
@@ -1442,6 +1450,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('sync.open-remote-library'),
+    googleDrive: googleDriveCredentialsSchema.optional(),
     baseUrl: nonBlankString,
     username: z.string().optional(),
     password: z.string().optional(),
@@ -1453,6 +1462,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('sync.preview'),
+    googleDrive: googleDriveCredentialsSchema.optional(),
     libraryId: identifierSchema,
     deviceId: nonBlankString,
     baseUrl: nonBlankString,
@@ -1463,6 +1473,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('sync.run'),
+    googleDrive: googleDriveCredentialsSchema.optional(),
     libraryId: identifierSchema,
     deviceId: nonBlankString,
     baseUrl: nonBlankString,
@@ -1473,6 +1484,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('sync.poll-remote'),
+    googleDrive: googleDriveCredentialsSchema.optional(),
     libraryId: identifierSchema,
     deviceId: nonBlankString,
     baseUrl: nonBlankString,

@@ -12,11 +12,11 @@ import {
   SYNC_TRASH_DIR,
   sanitizeSyncDirectoryName,
   SYNC_FORMAT_VERSION,
-  normalizeWebDAVBaseUrl,
 } from '../../shared/sync-paths';
 import type { DriverCapabilities, RemoteStorageDriver } from './remote-storage';
 import { RemoteStorageError } from './remote-storage';
-import { WebDAVDriver } from './webdav-driver';
+import { createSyncDriver } from './create-driver';
+import type { GoogleDriveCredentials } from '../../shared/google-drive-sync';
 import {
   createEmptyManifest,
   parseManifest,
@@ -29,6 +29,7 @@ import type { SyncAssetMetadata } from './sync-metadata';
 import { runSyncActions, withRetry, type SyncRunnerContext } from './sync-runner';
 
 export interface SyncRootConfig {
+  googleDrive?: GoogleDriveCredentials;
   id: string;
   baseUrl: string;
   username?: string;
@@ -113,18 +114,7 @@ export class SyncEngine {
   constructor(private readonly library: SyncLibraryPort, private readonly options: SyncEngineOptions) {}
 
   buildDriver(root: SyncRootConfig): RemoteStorageDriver {
-    // Serpent-fatf: 纵深防御 —— 命令入口已规范化，但 engine 可能被直接
-    // 调用（后台定时同步等）；非法地址在这里给可读错误而非 TypeError。
-    const normalized = normalizeWebDAVBaseUrl(root.baseUrl);
-    if (!normalized.ok) {
-      throw new RemoteStorageError('INVALID_URL', normalized.error);
-    }
-    return new WebDAVDriver({
-      baseUrl: normalized.value,
-      username: root.username,
-      password: root.password,
-      allowInsecureTls: root.allowInsecureTls ?? false,
-    });
+    return createSyncDriver(root);
   }
 
   /** 首次同步预览：只计算差异，不执行任何写入。 */
@@ -133,7 +123,7 @@ export class SyncEngine {
     const capabilities = await driver.probe();
     const snapshot = await this.library.syncSnapshot(libraryId);
     const directoryName = sanitizeSyncDirectoryName(root.directoryName ?? snapshot.library.displayName, snapshot.library.libraryId);
-    const { remoteManifest, tombstones } = await this.loadRemoteState(driver, directoryName, snapshot.library.libraryId);
+    const { remoteManifest, tombstones } = await this.loadRemoteState(driver, directoryName, snapshot.library.libraryId, Boolean(root.googleDrive));
     const localManifest = await this.loadLocalManifest(libraryId, snapshot.library, directoryName);
     const localAssets = this.snapshotToMap(snapshot);
     const actions = planSyncActions({
@@ -159,6 +149,7 @@ export class SyncEngine {
       driver,
       directoryName,
       snapshot.library.libraryId,
+      Boolean(root.googleDrive),
     );
     const localManifest = await this.loadLocalManifest(libraryId, snapshot.library, directoryName);
     const localAssets = this.snapshotToMap(snapshot);
@@ -172,6 +163,7 @@ export class SyncEngine {
 
     const now = this.options.now?.() ?? new Date().toISOString();
     const context: SyncRunnerContext = {
+      failFast: Boolean(root.googleDrive),
       driver,
       libraryDirectory: directoryName,
       deviceId: this.options.deviceId,
@@ -283,7 +275,8 @@ export class SyncEngine {
     try {
       const read = await driver.read(`${prefix}${SYNC_MANIFEST_FILE}`);
       remoteManifest = parseManifest(read.body.toString('utf-8'));
-    } catch {
+    } catch (error) {
+      if (root.googleDrive && (!(error instanceof RemoteStorageError) || error.code !== 'NOT_FOUND')) throw error;
       // 远端无 manifest：首次同步或远端被清空，都需要一次完整同步。
       return true;
     }
@@ -347,6 +340,7 @@ export class SyncEngine {
     driver: RemoteStorageDriver,
     directoryName: string,
     libraryId: string,
+    strict = false,
   ): Promise<{ remoteManifest: SyncManifest; tombstones: Set<string>; existed: boolean }> {
     const prefix = directoryName === '' ? '' : `${directoryName}/`;
     const tombstones = new Set<string>();
@@ -356,7 +350,8 @@ export class SyncEngine {
       const read = await driver.read(`${prefix}${SYNC_MANIFEST_FILE}`);
       remoteManifest = parseManifest(read.body.toString('utf-8'));
       existed = true;
-    } catch {
+    } catch (error) {
+      if (strict && (!(error instanceof RemoteStorageError) || error.code !== 'NOT_FOUND')) throw error;
       // 无 manifest：视为首次同步。
     }
     try {
@@ -366,7 +361,8 @@ export class SyncEngine {
         const match = entry.path.match(/([^/]+)\.json$/);
         if (match) tombstones.add(decodeURIComponent(match[1]!));
       }
-    } catch {
+    } catch (error) {
+      if (strict && (!(error instanceof RemoteStorageError) || error.code !== 'NOT_FOUND')) throw error;
       // 无 trash 目录：无墓碑。
     }
     return { remoteManifest, tombstones, existed };

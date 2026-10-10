@@ -10,15 +10,15 @@ import {
 } from '../shared/app-log';
 
 const MAX_LOG_READ_BYTES = 2_000_000;
-const sensitiveContextKey = /^(?:api[_-]?key|access[_-]?token|token|secret|password|authorization|proxy-authorization|cookie|set-cookie|env|environment|process[_-]?env)$/iu;
+const sensitiveContextKey = /^(?:api[_-]?key|(?:access|refresh)[_-]?token|client[_-]?secret|token|secret|password|authorization|proxy-authorization|cookie|set-cookie|env|environment|process[_-]?env)$/iu;
 
 function redactText(value: string): string {
   return value
     .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED_API_KEY]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED_TOKEN]')
     .replace(/((?:proxy-)?authorization\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
-    .replace(/([?&](?:api[_-]?key|access[_-]?token|token|secret|password)=)[^&\s]+/gi, '$1[REDACTED]')
-    .replace(/((?:api[_-]?key|access[_-]?token|token|secret|password)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
+    .replace(/([?&](?:api[_-]?key|(?:access|refresh)[_-]?token|client[_-]?secret|token|secret|password)=)[^&\s]+/gi, '$1[REDACTED]')
+    .replace(/((?:api[_-]?key|(?:access|refresh)[_-]?token|client[_-]?secret|token|secret|password)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
 }
 
 function redactValue(value: unknown, depth = 0): unknown {
