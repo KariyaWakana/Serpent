@@ -390,6 +390,8 @@ export const zhCN = {
       reset: "恢复示例",
       stop: "停止",
       openRunLog: "查看此次运行日志",
+      historyStatus: { succeeded: "已完成", failed: "失败", cancelled: "已取消", timedOut: "超时", running: "运行中", awaitingAuthorization: "待确认", awaitingApproval: "待审批" },
+      historySource: { console: "编辑器", script: "脚本文件", mcp: "MCP", plugin: "插件", test: "测试" },
       historyTitle: "最近自动化运行",
       historyEmpty: "此资源库尚无运行记录。",
       recentScriptsTitle: "最近脚本",

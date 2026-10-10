@@ -65,6 +65,10 @@ test('packaged script review stays in-app, cancels without writes, and runs the 
     await expect(dialog.locator('pre').first()).toContainText('reviewed note');
     await expect(dialog.locator('pre').first()).toContainText('reviewed tag');
     await expect(dialog.locator('pre').first()).toContainText('reviewed collection');
+    const panel=await dialog.boundingBox();
+    const action=await dialog.getByRole('button',{name:'运行',exact:true}).boundingBox();
+    expect(panel&&action&&action.y+action.height<=panel.y+panel.height).toBe(true);
+    await expect(dialog).not.toContainText('automation.preview.historyStatus.');
     expect(await application.evaluate(()=> (globalThis as any).__nativeScriptDialogs.calls)).toBe(0);
     await window.screenshot({path:test.info().outputPath('in-app-script-completed.png')});
   } finally {

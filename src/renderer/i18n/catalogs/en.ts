@@ -403,6 +403,8 @@ export const en = {
       reset: "Restore example",
       stop: "Stop",
       openRunLog: "View this run's log",
+      historyStatus: { succeeded: "Completed", failed: "Failed", cancelled: "Cancelled", timedOut: "Timed out", running: "Running", awaitingAuthorization: "Awaiting confirmation", awaitingApproval: "Awaiting approval" },
+      historySource: { console: "Editor", script: "Script file", mcp: "MCP", plugin: "Plugin", test: "Test" },
       historyTitle: "Recent automation runs",
       historyEmpty: "No recorded runs for this library yet.",
       recentScriptsTitle: "Recent scripts",

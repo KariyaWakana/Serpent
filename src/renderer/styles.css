@@ -14121,3 +14121,13 @@ select.ai-config-input.ai-config-languages {
 .script-sandbox-preview-body:not([hidden]) { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
 
 .script-sandbox-preview-consent .field-help { font-size: calc(12px * var(--ui-font-scale)); line-height: 1.6; }
+
+.script-sandbox-preview-dialog > [data-dialog-content="true"] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+.script-sandbox-preview-body:not([hidden]) { flex: 1 1 auto; }
+.script-sandbox-preview-body > * { flex-shrink: 0; }
+.script-sandbox-preview-dialog .dialog-actions { flex: 0 0 auto; }
