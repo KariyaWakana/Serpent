@@ -3,8 +3,8 @@ import { DxfViewer } from 'dxf-viewer';
 import fontUrl from '../../resources/fonts/DejaVuSans.ttf?url';
 import { useT } from './i18n';
 
-type Props = {sourceUrl:string; enabled?:boolean; onOpenExternal:()=>void; onPresentationReady?:()=>void};
-export function DxfViewerSurface({sourceUrl,enabled=true,onOpenExternal,onPresentationReady}:Props) {
+type Props = {sourceUrl:string; format?:'DXF'|'DWG'; enabled?:boolean; onOpenExternal:()=>void; onPresentationReady?:()=>void};
+export function DxfViewerSurface({sourceUrl,format='DXF',enabled=true,onOpenExternal,onPresentationReady}:Props) {
   const t=useT();
   const container=useRef<HTMLDivElement>(null);
   const instance=useRef<DxfViewer|null>(null);
@@ -54,7 +54,7 @@ export function DxfViewerSurface({sourceUrl,enabled=true,onOpenExternal,onPresen
     return()=>{alive=false;window.clearTimeout(timeout);instance.current=null;viewer?.Destroy();container.current?.replaceChildren();};
   },[sourceUrl,enabled,t]);
   return <section className="preview-cad" aria-label={t('preview.cadTitle')}>
-    <div className="preview-cad-toolbar"><strong>DXF</strong><span>{t('preview.cadModelSpace')}</span>
+    <div className="preview-cad-toolbar"><strong>{format}</strong><span>{t('preview.cadModelSpace')}</span>
       <button type="button" onClick={fit} disabled={state!=='ready'}>{t('preview.cadFit')}</button>
       <button type="button" onClick={onOpenExternal}>{t('preview.openExternal')}</button>
     </div>
@@ -68,6 +68,6 @@ export function DxfViewerSurface({sourceUrl,enabled=true,onOpenExternal,onPresen
       {state==='loading'&&enabled?<div className="preview-cad-status" role="status">{t('preview.resolving')} {progress?`${progress}%`:''}</div>:null}
       {state==='failed'?<div className="preview-cad-status" role="status">{t('preview.cadFailed')}<p>{error}</p></div>:null}
     </div>
-    <div className="preview-cad-notice">{t('preview.cadLimits')}{warning?` ${t('preview.cadWarning')}`:''}</div>
+    <div className="preview-cad-notice">{format==='DWG'?`${t('preview.cadDwgConverted')} `:''}{t('preview.cadLimits')}{warning?` ${t('preview.cadWarning')}`:''}</div>
   </section>;
 }

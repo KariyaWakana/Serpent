@@ -109,6 +109,12 @@ const PREVIEW_ERROR_KEYS: Record<string, string> = {
   SHARP_UNAVAILABLE: "preview.sharpUnavailable",
   MEDIA_PROCESSING_FAILED: "preview.mediaProcessingFailed",
   UNSUPPORTED_FORMAT: "preview.unsupportedFormat",
+  DWG_CONVERTER_NOT_FOUND: 'preview.dwgConverterRequired',
+  DWG_PREVIEW_TIMEOUT: 'preview.dwgConversionTimeout',
+  DWG_PREVIEW_FAILED: 'preview.dwgConversionFailed',
+  DWG_PREVIEW_INVALID: 'preview.dwgConversionFailed',
+  DWG_SOURCE_CHANGED: 'preview.dwgSourceChanged',
+  DWG_PREVIEW_TOO_LARGE: 'preview.dwgPreviewTooLarge',
 };
 function previewErrorDetail(
   errorCode: string | undefined,
@@ -302,7 +308,7 @@ const AssetPreviewModalContent = forwardRef<
           // real decode failure, switch this same viewer request to the
           // explicit proxy-fallback intent so a ready derivative can replace
           // the failed source without any eager encoding.
-          intent: requestedProxyFallbackRef.current
+          intent: preloadOnly && asset.relativeFilePath.toLowerCase().endsWith('.dwg') ? 'hover' : requestedProxyFallbackRef.current
             ? "proxy-fallback"
             : "viewer",
           ...(asset.mediaType === "image" ? { exrPlane } : {}),
@@ -397,6 +403,8 @@ const AssetPreviewModalContent = forwardRef<
       api,
       asset.assetId,
       asset.mediaType,
+      asset.relativeFilePath,
+      preloadOnly,
       libraryId,
       selectedColorSpace,
       selectedExrPlane,
@@ -1220,8 +1228,9 @@ const AssetPreviewModalContent = forwardRef<
               preloadOnly={preloadOnly}
               sourceUrl={resolution.url}
             />
-          ) : ready && asset.relativeFilePath.toLowerCase().endsWith('.dxf') && resolution?.url ? (
+          ) : ready && /\.(dxf|dwg)$/i.test(asset.relativeFilePath) && resolution?.url ? (
             <DxfViewerSurface key={`${libraryId}:${asset.assetId}`} sourceUrl={resolution.url}
+              format={asset.relativeFilePath.toLowerCase().endsWith('.dwg')?'DWG':'DXF'}
               enabled={!preloadOnly}
               onOpenExternal={() => void openExternal()} onPresentationReady={notifyPresentationReady} />
           ) : ready && resolution?.mediaType === "font" && resolution.url ? (

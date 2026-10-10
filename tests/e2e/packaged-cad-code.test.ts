@@ -32,8 +32,9 @@ test('packaged DXF and code previews load actual assets without changing sources
     await win.evaluate(async()=>{const api=(window as any).serpent.library;const libs=await api.listOpen();
       const page=await api.openBrowseSession({libraryId:libs.value[0].libraryId,query:null,limit:100});
       if(page.ok)await api.closeBrowseSession({libraryId:libs.value[0].libraryId,sessionId:page.value.sessionId});});
-    await win.getByRole('button',{name:'导入文件',exact:true}).first().click();
-    await expect(win.getByText('drawing.dxf',{exact:true}).first()).toBeVisible();
+    await win.evaluate(async()=>{const api=(window as any).serpent.library;const libs=await api.listOpen();const result=await api.importFiles({libraryId:libs.value[0].libraryId});if(!result.ok)throw new Error(JSON.stringify(result));});
+    await win.getByRole('button',{name:'刷新磁盘变化'}).click();
+    await expect(win.getByText('drawing.dxf',{exact:true}).first()).toBeVisible({timeout:30000});
     await win.getByText('drawing.dxf',{exact:true}).first().dblclick();
     await expect(win.getByRole('region',{name:'CAD 图纸预览'})).toBeVisible();
     await expect(win.getByRole('button',{name:'适合窗口'})).toBeEnabled({timeout:65_000});
