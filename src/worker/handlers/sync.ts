@@ -11,7 +11,7 @@ import type { WorkerResult } from '../../shared/protocol/responses';
 import type { LibraryService } from '../library-service';
 import { parseManifest, serializeManifest } from '../sync/manifest';
 import { createLibrarySyncPort } from '../sync/library-port';
-import { parseSyncAssetMetadata } from '../sync/sync-metadata';
+import { readRemoteMetadata } from '../sync/read-remote-metadata';
 import { SyncEngine, type SyncEngineOptions } from '../sync/sync-engine';
 import { createSyncDriver } from '../sync/create-driver';
 import { RemoteStorageError } from '../sync/remote-storage';
@@ -177,7 +177,7 @@ export async function executeSyncWorkerCommand(
             directoryName: manifest.directoryName,
           });
         } catch (error) {
-          if (request.command.googleDrive && error instanceof RemoteStorageError && error.code !== 'NOT_FOUND') throw error;
+          if (request.command.googleDrive && (!(error instanceof RemoteStorageError) || error.code !== 'NOT_FOUND')) throw error;
           // 无有效 manifest 的目录不是同步库，跳过。
         }
       }
@@ -208,16 +208,14 @@ export async function executeSyncWorkerCommand(
       try {
         for (const [syncId, entry] of Object.entries(manifest.entries)) {
           const read = await driver.read(`${directoryName}/${SYNC_ASSETS_DIR}/${entry.path}`);
+          const metadata = await readRemoteMetadata(
+            driver, `${directoryName}/${SYNC_METADATA_DIR}/${syncId}.json`, entry, Boolean(request.command.googleDrive),
+          );
           libraryService.applySyncContentUpdate(created.libraryId, syncId, entry.path, read.body);
           try {
-            const sidecar = await driver.read(`${directoryName}/${SYNC_METADATA_DIR}/${syncId}.json`);
-            libraryService.applySyncAssetMetadata(
-              created.libraryId,
-              syncId,
-              parseSyncAssetMetadata(sidecar.body.toString('utf-8')),
-            );
+            if (metadata) libraryService.applySyncAssetMetadata(created.libraryId, syncId, metadata);
           } catch (error) {
-            if (request.command.googleDrive && (!(error instanceof RemoteStorageError) || error.code !== 'NOT_FOUND')) throw error;
+            if (request.command.googleDrive) throw error;
             // 无 sidecar：只落媒体。
           }
         }

@@ -10,15 +10,16 @@
  */
 
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
-import type { RemoteStorageDriver, RemoteStorageError } from './remote-storage';
-import { DriverUnsupportedError } from './remote-storage';
+import type { RemoteStorageDriver } from './remote-storage';
+import { DriverUnsupportedError, RemoteStorageError } from './remote-storage';
+import { readRemoteMetadata } from './read-remote-metadata';
 import type { SyncManifest, SyncManifestEntry } from './manifest';
 import { SYNC_ASSETS_DIR, SYNC_METADATA_DIR, SYNC_TRASH_DIR } from '../../shared/sync-paths';
 import type { SyncAction } from './sync-plan';
 import {
   metadataContentHash,
-  parseSyncAssetMetadata,
   serializeSyncAssetMetadata,
   type SyncAssetMetadata,
 } from './sync-metadata';
@@ -99,11 +100,11 @@ export interface SyncRunResult {
 }
 
 /** `name.ext` → `name (conflict-YYYYMMDD-HHMM).ext`。 */
-export function conflictCopyFileName(originalPath: string, now: string): string {
+export function conflictCopyFileName(originalPath: string, now: string, suffix?: string): string {
   const dir = path.posix.dirname(originalPath);
   const base = path.posix.basename(originalPath);
   const dot = base.lastIndexOf('.');
-  const stamp = now.replace(/\D/g, '').slice(0, 12);
+  const stamp = now.replace(/\D/g, '').slice(0, 12) + (suffix ? `-${suffix}` : '');
   const conflictBase = dot > 0
     ? `${base.slice(0, dot)} (conflict-${stamp})${base.slice(dot)}`
     : `${base} (conflict-${stamp})`;
@@ -211,7 +212,8 @@ async function executeSyncAction(
       if (action.previousPath && action.previousPath !== action.entry.path) {
         try {
           await moveRemoteFile(driver, assetPath(action.previousPath), remotePath);
-        } catch {
+        } catch (error) {
+          if (context.failFast && (!(error instanceof RemoteStorageError) || error.code !== 'NOT_FOUND')) throw error;
           // 旧路径可能已不在远端（仅内容变更或上次未同步移动），继续 PUT 新路径。
         }
       }
@@ -228,17 +230,21 @@ async function executeSyncAction(
       const remotePath = assetPath(action.entry.path);
       await ensureRemoteDir(driver, remotePath);
       const read = await withRetry(() => driver.read(remotePath));
+      // Validate the sidecar before changing local content, so a failed first
+      // download cannot leave an imported asset with silently missing tags.
+      const metadata = context.applyRemoteMetadata
+        ? await withRetry(() => readRemoteMetadata(driver, metadataPath(action.assetId), action.entry, Boolean(context.failFast)))
+        : undefined;
       await context.writeLocalAsset(action.assetId, action.entry.path, read.body);
       let metadataHash = action.entry.metadataHash;
       let metadataVersion = action.entry.metadataVersion;
-      if (context.applyRemoteMetadata) {
+      if (metadata && context.applyRemoteMetadata) {
         try {
-          const sidecar = await driver.read(metadataPath(action.assetId));
-          const metadata = parseSyncAssetMetadata(sidecar.body.toString('utf-8'));
           await context.applyRemoteMetadata(action.assetId, metadata);
           metadataHash = metadataContentHash(metadata);
           metadataVersion = Math.max(1, action.entry.metadataVersion);
-        } catch {
+        } catch (error) {
+          if (context.failFast) throw error;
           // 无 sidecar：只落媒体。
         }
       }
@@ -252,11 +258,17 @@ async function executeSyncAction(
       break;
     }
     case 'conflict': {
-      const conflictName = conflictCopyFileName(action.remote.path, now);
+      const conflictName = conflictCopyFileName(action.remote.path, now, context.failFast ? randomUUID() : undefined);
+      const backupOptions = context.failFast ? { overwrite: false } : {};
       if (action.winner === 'local') {
         const localBody = await context.readLocalAsset(action.assetId);
         const remoteBody = await withRetry(() => driver.read(assetPath(action.remote.path))).then((read) => read.body);
         const remotePath = assetPath(action.remote.path);
+        // Preserve the losing version on both sides before replacing either
+        // original. A failed backup must never destroy the only durable copy.
+        await ensureRemoteDir(driver, assetPath(conflictName));
+        await withRetry(() => driver.write(assetPath(conflictName), remoteBody, backupOptions));
+        const copyMeta = await context.saveLocalConflictCopy(action.assetId, action.remote.path, remoteBody, conflictName);
         await ensureRemoteDir(driver, remotePath);
         const written = await withRetry(() => driver.write(remotePath, localBody, {
           ...(action.remote.etag === undefined ? {} : { ifMatch: action.remote.etag }),
@@ -270,9 +282,6 @@ async function executeSyncAction(
           modifiedAt: now,
           etag: written.etag,
         };
-        await ensureRemoteDir(driver, assetPath(conflictName));
-        await withRetry(() => driver.write(assetPath(conflictName), remoteBody));
-        const copyMeta = await context.saveLocalConflictCopy(action.assetId, action.remote.path, remoteBody, conflictName);
         manifest.entries[copyMeta.syncId] = {
           path: conflictName,
           contentHash: copyMeta.contentHash,
@@ -286,11 +295,11 @@ async function executeSyncAction(
       } else {
         const remoteBody = await withRetry(() => driver.read(assetPath(action.remote.path))).then((read) => read.body);
         const localBody = await context.readLocalAsset(action.assetId);
+        await ensureRemoteDir(driver, assetPath(conflictName));
+        await withRetry(() => driver.write(assetPath(conflictName), localBody, backupOptions));
+        const copyMeta = await context.saveLocalConflictCopy(action.assetId, action.remote.path, localBody, conflictName);
         await context.writeLocalAsset(action.assetId, action.remote.path, remoteBody);
         manifest.entries[action.assetId] = { ...action.remote };
-        await ensureRemoteDir(driver, assetPath(conflictName));
-        await withRetry(() => driver.write(assetPath(conflictName), localBody));
-        const copyMeta = await context.saveLocalConflictCopy(action.assetId, action.remote.path, localBody, conflictName);
         manifest.entries[copyMeta.syncId] = {
           path: conflictName,
           contentHash: copyMeta.contentHash,
@@ -373,8 +382,12 @@ async function executeSyncAction(
     }
     case 'download-metadata': {
       if (!context.applyRemoteMetadata) break;
-      const read = await withRetry(() => driver.read(metadataPath(action.assetId)));
-      await context.applyRemoteMetadata(action.assetId, parseSyncAssetMetadata(read.body.toString('utf-8')));
+      const metadata = await withRetry(() => readRemoteMetadata(driver, metadataPath(action.assetId), action.entry, Boolean(context.failFast)));
+      if (!metadata) {
+        // Keep the legacy non-strict runner's failure accounting for an absent sidecar.
+        throw new RemoteStorageError('NOT_FOUND', 'Remote metadata is missing.');
+      }
+      await context.applyRemoteMetadata(action.assetId, metadata);
       manifest.entries[action.assetId] = { ...action.entry };
       break;
     }
