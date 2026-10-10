@@ -73,6 +73,7 @@ test('runs the default Desktop Console script and rates only its matching assets
     await expect(dialog.getByRole('textbox', { name: '脚本' })).toHaveValue(/serpent\.assets\.setRating/);
     await expect(dialog).not.toContainText(temporaryRoot);
     await dialog.getByRole('button', { name: '运行', exact: true }).click();
+    await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
     await expect(dialog.getByText('返回结果', { exact: true })).toBeVisible();
     await expect(dialog.locator('pre').first()).toContainText('"matched": 1');
     await expect(dialog.locator('pre').first()).toContainText('"updatedCount": 1');

@@ -354,6 +354,15 @@ export const en = {
   },
   automation: {
     preview: {
+      reviewLibrary: "Target library: {name}",
+      reviewNoLibrary: "None selected",
+      reviewTitle: "Review script run",
+      reviewSource: "Run the current editor source ({bytes} bytes). Editing it requires another review.",
+      reviewScope: "Allow reading assets, tags and collections; editing notes and ratings; creating tags, folders and collections; moving, renaming or trashing assets; queuing AI analysis; and copying file paths.",
+      reviewLimits: "This approval covers this script only. Library creation and batch imports require separate confirmation. Scripts receive no network, direct disk, database or permanent deletion access. Runs are logged.",
+      reviewBack: "Back to editor",
+      reviewConfirm: "Confirm and run",
+
       open: "Automation script",
       badge: "RESTRICTED AUTOMATION",
       title: "Automation script",

@@ -341,6 +341,15 @@ export const zhCN = {
   },
   automation: {
     preview: {
+      reviewLibrary: "目标资源库：{name}",
+      reviewNoLibrary: "尚未选择",
+      reviewTitle: "运行前确认",
+      reviewSource: "将运行当前编辑器中的脚本（{bytes} 字节）。返回编辑后需重新确认。",
+      reviewScope: "允许读取资产、标签和合集，修改注释与评分，创建标签、文件夹和合集，移动、重命名资产或移入回收站，入队 AI 分析，以及复制文件路径。",
+      reviewLimits: "本次确认仅针对这段脚本。新建资源库和批量导入仍需单独确认；脚本不获得网络、磁盘直读、数据库或永久删除权限。运行会记录到应用日志。",
+      reviewBack: "返回编辑",
+      reviewConfirm: "确认并运行",
+
       open: "自动化脚本",
       badge: "受限自动化",
       title: "自动化脚本",

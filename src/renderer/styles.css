@@ -14113,3 +14113,11 @@ select.ai-config-input.ai-config-languages {
   justify-content: space-between;
   gap: var(--ui-space-3);
 }
+
+.script-sandbox-preview-consent { padding: 8px 0 20px; line-height: 1.7; }
+.script-sandbox-preview-consent h3 { margin: 0 0 12px; }
+.script-sandbox-preview-consent p { margin: 0 0 12px; }
+
+.script-sandbox-preview-body:not([hidden]) { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+
+.script-sandbox-preview-consent .field-help { font-size: calc(12px * var(--ui-font-scale)); line-height: 1.6; }

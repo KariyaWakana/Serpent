@@ -15124,6 +15124,7 @@ function AppInner() {
       <ScriptSandboxPreviewDialog
         automation={(window as RendererWindow).serpent?.automation}
         libraryId={library?.libraryId ?? null}
+        libraryDisplayName={library?.displayName}
         onClose={() => {
           setScriptSandboxPreviewOpen(false);
         }}

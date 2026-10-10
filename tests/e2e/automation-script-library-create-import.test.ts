@@ -61,6 +61,7 @@ test('creates a library, then inspects, imports, and restores it through Desktop
       return { inspected, imported };
     `);
     await dialog.getByRole('button', { name: '运行', exact: true }).click();
+    await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
     await expect(dialog.getByText('返回结果', { exact: true })).toBeVisible();
     const result = dialog.locator('pre').first();
     await expect(result).toContainText(`"${libraryName}"`);
@@ -125,10 +126,12 @@ test('cancels a planned import before retrying it successfully', async () => {
 
     await dialog.locator('#script-sandbox-preview-source').fill(sourceCode);
     await dialog.getByRole('button', { name: '运行', exact: true }).click();
+    await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
     await expect(dialog.locator('.script-sandbox-preview-result[data-state="failed"]')).toBeVisible();
     await expect(window.locator('.asset-card', { hasText: 'cancelled-import.txt' })).toHaveCount(0);
 
     await dialog.getByRole('button', { name: '运行', exact: true }).click();
+    await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
     await expect(dialog.getByText('返回结果', { exact: true })).toBeVisible();
     await expect(dialog.locator('pre').first()).toContainText('"importedCount": 1');
     await expect(window.locator('.asset-card', { hasText: 'cancelled-import.txt' })).toBeVisible();

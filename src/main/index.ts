@@ -3167,30 +3167,11 @@ async function handleLibraryRequest(
   }
 }
 
-async function confirmDesktopAutomationWrite(): Promise<boolean> {
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
-  // Native modal dialogs are not controllable through Playwright. Restrict
-  // this deterministic test seam to an unpackaged, isolated E2E process; it
-  // can never be enabled by a shipped build or normal `npm start` session.
-  if (!app.isPackaged
-    && process.env.SERPENT_E2E === '1'
-    && process.env.SERPENT_E2E_AUTOMATION_CONFIRM === '1') {
-    return true;
-  }
-  const response = await dialog.showMessageBox(mainWindow, {
-    type: 'warning',
-    buttons: ['取消', '运行脚本'],
-    defaultId: 1,
-    cancelId: 0,
-    title: '运行自动化脚本',
-    message: '此脚本可以读取资产、标签与合集，修改评分与元数据，创建标签或空文件夹，整理合集，入队 AI 分析，复制文件路径，以及重命名或移入回收站。',
-    detail: '脚本只会获得受限自动化能力；新建资源库和批量导入仍需单独的本机计划确认，不会获得网络下载、磁盘直读、数据库或永久删除权限。每次运行都会记录到应用日志。',
-  });
-  ensureRendererKeyboardFocus(mainWindow, {
-    reattachHwnd: true,
-    reason: "native-dialog.message-box",
-  });
-  return response.response === 1;
+async function confirmDesktopAutomationWrite(confirmed: boolean): Promise<boolean> {
+  // The trusted desktop renderer reviews the exact source before start.
+  // Main still binds that source, library and sender to the execution; callers
+  // omitting consent are rejected without opening a native warning dialog.
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && confirmed);
 }
 
 let e2eAutomationFilePlanConfirmationCount = 0;
@@ -3204,7 +3185,7 @@ async function confirmDesktopAutomationFilePlan(
     libraryDisplayName?: string;
   },
 ): Promise<boolean> {
-  // See confirmDesktopAutomationWrite: this is an isolated, unpackaged E2E
+  // This is an isolated, unpackaged E2E
   // seam only. Production builds always display the fresh plan confirmation.
   if (!app.isPackaged
     && process.env.SERPENT_E2E === '1'

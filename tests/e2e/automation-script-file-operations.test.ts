@@ -54,6 +54,7 @@ test('runs a planned batch file rename through the Desktop Console without expos
       return result;
     `);
     await dialog.getByRole('button', { name: '运行', exact: true }).click();
+    await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
     await expect(dialog.getByText('返回结果', { exact: true })).toBeVisible();
     await expect(dialog.locator('pre').first()).toContainText('"renamedCount": 1');
     // Neither the result area nor the trusted script object receives an
@@ -115,6 +116,7 @@ test('moves an asset through the Desktop Console plan and updates its folder loc
       return await serpent.assets.moveToFolder(page.items.map((asset) => asset.id), target.id);
     `);
     await dialog.getByRole('button', { name: '运行', exact: true }).click();
+    await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
     await expect(dialog.getByText('返回结果', { exact: true })).toBeVisible();
     await expect(dialog.locator('pre').first()).toContainText('"movedCount": 1');
     await expect(dialog.locator('pre').first()).not.toContainText(temporaryRoot);
@@ -179,6 +181,7 @@ test('undoes a scripted asset move from the Desktop Console', async () => {
       return await serpent.assets.moveToFolder(page.items.map((asset) => asset.id), target.id);
     `);
     await dialog.getByRole('button', { name: '运行', exact: true }).click();
+    await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
     await expect(dialog.getByText('返回结果', { exact: true })).toBeVisible();
     await expect(dialog.locator('pre').first()).toContainText('"movedCount": 1');
     await expect(dialog).not.toContainText(temporaryRoot);
